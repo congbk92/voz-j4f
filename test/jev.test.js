@@ -94,9 +94,11 @@ describe('callJev', () => {
     expect(init.method).toBe('POST');
     expect(init.headers.Authorization).toBe('Bearer sk-abc');
     expect(init.headers['ai-evaluation-model-specification-version']).toBe('4');
+    expect(init.headers['ai-gateway-protocol-version']).toBe('0.0.1');
+    expect(init.headers['ai-gateway-auth-method']).toBe('api-key');
     expect(init.headers['ai-model-id']).toBe('typesafe-ai/jev');
     expect(JSON.parse(init.body)).toEqual({
-      state: { member: 'alice' }, questions: { archetype: {} },
+      state: { member: 'alice' }, questions: { archetype: {} }, providerOptions: {},
     });
   });
 
