@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "node scripts/build.mjs",
+    "icons": "node scripts/icons.mjs",
     "pack": "node scripts/pack.mjs",
     "probe": "node scripts/probe-print.mjs",
     "classify": "node scripts/classify-cli.mjs"
