@@ -83,6 +83,38 @@ describe('upsertPosts', () => {
     expect(m.threads).not.toContain('T1');
   });
 
+  it('stores a multi-post batch newest-first when the batch arrives oldest-first', async () => {
+    // Document order from extractPosts is oldest-first; the window must come out
+    // newest-first, or the cap silently discards the most recent posts.
+    await store.upsertPosts([
+      post('1', '42', 'bình luận đủ dài số một'),
+      post('2', '42', 'bình luận đủ dài số hai'),
+      post('3', '42', 'bình luận đủ dài số ba'),
+    ]);
+    expect((await store.getMember('42')).posts.map((p) => p.postId)).toEqual(['3', '2', '1']);
+  });
+
+  it('stays idempotent past the cap, so an identical resend changes nothing', async () => {
+    const cfg = { maxPostsPerMember: 20 };
+    const batch = Array.from({ length: 25 }, (_, i) =>
+      post(String(i + 1), '42', `bình luận đủ dài số ${i + 1}`));
+    await store.upsertPosts(batch, cfg);
+    const first = await store.getMember('42');
+    await store.upsertPosts(batch, cfg);
+    const second = await store.getMember('42');
+    expect(second.totalPosts).toBe(25);
+    expect(second.posts.map((p) => p.postId)).toEqual(first.posts.map((p) => p.postId));
+  });
+
+  it('records every distinct thread in a mixed batch, newest first', async () => {
+    await store.upsertPosts([
+      post('1', '42', 'bình luận đủ dài số một', { thread: 'T1' }),
+      post('2', '42', 'bình luận đủ dài số hai', { thread: 'T2' }),
+      post('3', '42', 'bình luận đủ dài số ba', { thread: 'T3' }),
+    ]);
+    expect((await store.getMember('42')).threads).toEqual(['T3', 'T2', 'T1']);
+  });
+
   it('does not duplicate an already-known thread title', async () => {
     await store.upsertPosts([post('1', '42', 'bình luận đủ dài thứ nhất', { thread: 'T' })]);
     await store.upsertPosts([post('2', '42', 'bình luận đủ dài thứ hai', { thread: 'T' })]);
