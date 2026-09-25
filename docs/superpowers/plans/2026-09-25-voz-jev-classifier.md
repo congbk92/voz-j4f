@@ -1098,7 +1098,9 @@ git commit -m "feat: add exploratory DOM probe for voz markup discovery"
 - Consumes: nothing.
 - Produces: `extractPosts(root) -> IncomingPost[]`, where
   `IncomingPost = { postId: string, memberId: string, name: string, text: string, thread: string|null, joined: string|null, postCount: string|null }`
-  Also exports `SELECTORS`, `MIN_POST_CHARS = 15`, `cleanText(text)`, `postTextFrom(el)`.
+  Also exports `SELECTORS`, `MIN_POST_CHARS = 15`, `cleanText(text)`, `postTextFrom(el)`,
+  `postIdOf(el) -> string|null`, `memberIdOf(el) -> string|null`.
+  The last two exist so `content.js` does not re-derive the same id regexes.
 
 - [ ] **Step 1: Write the failing extraction test**
 
@@ -1282,7 +1284,8 @@ export function postTextFrom(el) {
   return cleanText(clone.textContent);
 }
 
-function memberIdFrom(el) {
+/** Exported so content.js reuses it rather than re-deriving the same regex. */
+export function memberIdOf(el) {
   const link = el.querySelector(SELECTORS.memberLink);
   const href = link && link.getAttribute('href');
   const m = href && href.match(/\.(\d+)\/?$/);
@@ -1300,7 +1303,7 @@ function profileFrom(el) {
   };
 }
 
-function postIdFrom(el) {
+export function postIdOf(el) {
   const content = el.getAttribute('data-content');
   if (content) {
     const m = content.match(/post-(\d+)/);
@@ -1321,8 +1324,8 @@ export function extractPosts(root) {
   const out = [];
 
   for (const el of root.querySelectorAll(SELECTORS.post)) {
-    const postId = postIdFrom(el);
-    const memberId = memberIdFrom(el);
+    const postId = postIdOf(el);
+    const memberId = memberIdOf(el);
     if (!postId || !memberId) continue;
 
     const text = postTextFrom(el);
@@ -2196,7 +2199,7 @@ export function createStore(storage, now = () => Date.now()) {
 - [ ] **Step 4: Run the store test**
 
 Run: `npx vitest run test/store.test.js`
-Expected: PASS, 22 tests
+Expected: PASS, 26 tests
 
 - [ ] **Step 5: Run the whole suite**
 
@@ -2220,9 +2223,9 @@ git commit -m "feat: member store with dedupe, caps, eviction, and trigger predi
 
 **Interfaces:**
 - Consumes: `FAMILY_COLORS` from `lib/labels.js`.
-- Produces: `chipText(chip, cfg, now = Date.now()) -> string`, `formatDuration(ms) -> string`, `chipColors(family, dark) -> {bg, fg}`, `buildChipState(member, cfg, now, labelLookup) -> chipState`.
+- Produces: `chipText(chip, cfg, now = Date.now()) -> string`, `formatDuration(ms) -> string`, `chipColors(family, dark) -> {bg, fg}`, `buildChipState(member, cfg, now) -> chipState`.
   `chipState` is one of:
-  - `{ state:'labeled', key, label, family, probability, lean, cached, seen, expiresAt }` — `expiresAt` is `null` when the TTL is disabled, `labelLookup` resolves a label key to its `{label, family}` entry (or `null`)
+  - `{ state:'labeled', key, label, family, probability, lean, cached, seen, expiresAt }` — the label's display name and family are resolved from `cfg.labels`; `expiresAt` is `null` when the TTL is disabled
   - `{ state:'collecting', count, threshold }`
   - `{ state:'error', message, cached, seen }`
 
@@ -2386,11 +2389,11 @@ export function chipColors(family, dark) {
 }
 
 /** Turn a member record into the display state the chip renders. */
-export function buildChipState(member, cfg, now, labelLookup) {
+export function buildChipState(member, cfg, now) {
   const cached = member.posts.length;
 
   if (member.label) {
-    const label = labelLookup ? labelLookup(member.label.choice) : null;
+    const label = (cfg.labels || []).find((l) => l.key === member.label.choice) || null;
     const prob = member.label.probabilities
       ? member.label.probabilities[member.label.choice]
       : undefined;
@@ -2490,13 +2493,8 @@ function watch(memberId, tabId) {
   watchers.get(memberId).add(tabId);
 }
 
-function labelLookup(labels) {
-  const map = new Map(labels.map((l) => [l.key, l]));
-  return (k) => map.get(k) || null;
-}
-
 function chipFor(member, cfg) {
-  return buildChipState(member, cfg, Date.now(), labelLookup(cfg.labels));
+  return buildChipState(member, cfg, Date.now());
 }
 
 async function collectChips(ids) {
@@ -2672,7 +2670,7 @@ Create (replacing) `extension/content.js`. Note the dynamic imports — content 
 
 ```js
 (async () => {
-  const [{ extractPosts }, { chipText, chipColors }, { createConfig }] = await Promise.all([
+  const [{ extractPosts, memberIdOf }, { chipText, chipColors }, { createConfig }] = await Promise.all([
     import(chrome.runtime.getURL('lib/voz.js')),
     import(chrome.runtime.getURL('lib/chip.js')),
     import(chrome.runtime.getURL('lib/config.js')),
@@ -2687,17 +2685,10 @@ Create (replacing) `extension/content.js`. Note the dynamic imports — content 
   const sent = new Set();    // postIds already reported; keeps collect idempotent
 
   const POST_SEL = 'article.message, [data-content^="post-"]';
-  const LINK_SEL = '.message-name a[href*="/members/"], a.username[href*="/members/"]';
 
   const isDark = () =>
     document.documentElement.getAttribute('data-variation') === 'alternate'
     || window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-  const postIdOf = (el) => (el.getAttribute('data-content') || '').match(/post-(\d+)/)?.[1] || null;
-  const memberIdOf = (el) => {
-    const href = el.querySelector(LINK_SEL)?.getAttribute('href');
-    return href ? (href.match(/\.(\d+)\/?$/) || [])[1] || null : null;
-  };
 
   const chipHost = (el) =>
     el.querySelector('.message-name') || el.querySelector('.message-cell--user');
@@ -2954,9 +2945,8 @@ async function render() {
     return;
   }
 
-  const lookup = (k) => cfg.labels.find((l) => l.key === k) || null;
   for (const m of members) {
-    const chip = buildChipState(m, cfg, Date.now(), lookup);
+    const chip = buildChipState(m, cfg, Date.now());
     const row = document.createElement('div');
     row.className = 'row';
 
