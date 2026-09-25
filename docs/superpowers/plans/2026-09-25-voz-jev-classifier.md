@@ -1546,9 +1546,11 @@ describe('callJev', () => {
     expect(init.method).toBe('POST');
     expect(init.headers.Authorization).toBe('Bearer sk-abc');
     expect(init.headers['ai-evaluation-model-specification-version']).toBe('4');
+    expect(init.headers['ai-gateway-protocol-version']).toBe('0.0.1');
+    expect(init.headers['ai-gateway-auth-method']).toBe('api-key');
     expect(init.headers['ai-model-id']).toBe('typesafe-ai/jev');
     expect(JSON.parse(init.body)).toEqual({
-      state: { member: 'alice' }, questions: { archetype: {} },
+      state: { member: 'alice' }, questions: { archetype: {} }, providerOptions: {},
     });
   });
 
@@ -1693,10 +1695,17 @@ export async function callJev({ apiKey, modelId, state, questions, fetchImpl = f
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      // Captured from the installed SDK's fetch, not read from its source. The
+      // provider factory adds the protocol and auth-method headers; the
+      // evaluation-model class does not, and omitting them earns a
+      // `400 Unsupported gateway protocol version` rather than a missing-header
+      // error, which is slow to diagnose from the message alone.
       'ai-evaluation-model-specification-version': '4',
+      'ai-gateway-protocol-version': '0.0.1',
+      'ai-gateway-auth-method': 'api-key',
       'ai-model-id': modelId,
     },
-    body: JSON.stringify({ state, questions }),
+    body: JSON.stringify({ state, questions, providerOptions: {} }),
   });
 
   if (!res.ok) {

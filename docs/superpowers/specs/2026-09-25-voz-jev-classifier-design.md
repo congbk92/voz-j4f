@@ -134,14 +134,24 @@ POST https://ai-gateway.vercel.sh/v4/ai/evaluation-model
   Authorization: Bearer <key>
   Content-Type: application/json
   ai-evaluation-model-specification-version: 4
+  ai-gateway-protocol-version: 0.0.1
+  ai-gateway-auth-method: api-key
   ai-model-id: typesafe-ai/jev
 
-  { "state": <JSON value>, "questions": { "<id>": <question> } }
+  { "state": <JSON value>, "questions": { "<id>": <question> }, "providerOptions": {} }
 
 → 200 { "answers": { "<id>": { "type": "choice", "choice": "troll",
                                "probabilities": { "troll": 0.62, … } } },
         "usage": { … }, "warnings": [ … ] }
 ```
+
+These four headers were captured by instrumenting the installed SDK's `fetch`, not by
+reading its source. That distinction matters: an earlier revision of this spec was
+derived by reading `GatewayEvaluationModel.doEvaluate`, which builds only two of
+them — the protocol and auth-method headers are assembled in the provider factory
+above it. The gateway answered the two-header request with
+`400 Unsupported gateway protocol version`, which names the missing header only
+obliquely. **Capture the request; do not read it.**
 
 This runs in the **background service worker**, never the content script. MV3
 grants host-permission fetches a CORS exemption; content scripts inherit the
