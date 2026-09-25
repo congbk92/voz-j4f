@@ -372,16 +372,22 @@ state, so asking for more costs output tokens, not another request:
     instructions: 'Phân loại kiểu thành viên diễn đàn dựa trên các bình luận sau. Chỉ dựa vào nội dung bình luận.',
     criteria: { thanh: '…', bo_do: '…', … }        // from cfg.labels
   },
-  lean: {
-    proGov:          { type: 'boolean', instructions: 'Có bảo vệ quan điểm Đảng/Nhà nước VN không?' },
-    proChina:        { type: 'boolean', instructions: 'Có thân Trung Quốc, bênh vực chính sách TQ không?' },
-    proUS:           { type: 'boolean', instructions: 'Có thân Mỹ, ca ngợi dân chủ phương Tây không?' },
-    antiGov:         { type: 'boolean', instructions: 'Có chống cộng, thái độ với chế độ hiện tại không?' },
-    selfDeprecating: { type: 'boolean', instructions: 'Có tự hạ thấp dân tộc hoặc người Việt không?' },
-    xenophile:       { type: 'boolean', instructions: 'Có ưa chuộng nước ngoài quá mức không?' },
-  }
+  proGov:          { type: 'boolean', instructions: 'Có bảo vệ quan điểm Đảng/Nhà nước VN không?' },
+  proChina:        { type: 'boolean', instructions: 'Có thân Trung Quốc, bênh vực chính sách TQ không?' },
+  proUS:           { type: 'boolean', instructions: 'Có thân Mỹ, ca ngợi dân chủ phương Tây không?' },
+  antiGov:         { type: 'boolean', instructions: 'Có chống cộng, thái độ với chế độ hiện tại không?' },
+  selfDeprecating: { type: 'boolean', instructions: 'Có tự hạ thấp dân tộc hoặc người Việt không?' },
+  xenophile:       { type: 'boolean', instructions: 'Có ưa chuộng nước ngoài quá mức không?' },
 }
 ```
+
+**`questions` is a flat map**, and each value must carry its own `type` discriminator —
+`choice`, `score`, or `boolean`. Nesting the lean booleans under a `lean` key makes the
+gateway read `questions.lean` as a question with no `type`, and it answers
+`400 Invalid discriminator value … path: ["questions","lean","type"]`. The lean axes
+therefore sit beside `archetype` at the top level, and `parseAnswer` collects every
+non-`archetype` answer that parses as a boolean. Verified by capturing the SDK's body,
+not by reading its source.
 
 **Why the second question exists.** Seven of the sixteen labels describe political
 allegiance, and unlike `troll` vs `thanh` they are not mutually exclusive. Someone

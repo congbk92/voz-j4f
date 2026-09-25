@@ -1522,10 +1522,23 @@ describe('buildQuestions', () => {
     expect(q.archetype.criteria.troll).toContain('gây tranh cãi');
   });
 
-  it('builds one boolean per lean question', () => {
+  it('builds one boolean per lean question, flat beside archetype', () => {
     const q = buildQuestions(DEFAULT_LABELS, LEAN_QUESTIONS, ARCHETYPE_INSTRUCTIONS);
-    expect(Object.keys(q.lean)).toHaveLength(6);
-    for (const v of Object.values(q.lean)) expect(v.type).toBe('boolean');
+    expect(Object.keys(q)).toHaveLength(1 + Object.keys(LEAN_QUESTIONS).length);
+    for (const key of Object.keys(LEAN_QUESTIONS)) {
+      expect(q[key].type).toBe('boolean');
+      expect(typeof q[key].instructions).toBe('string');
+    }
+  });
+
+  it('gives every question its own type discriminator, which is what the gateway validates', () => {
+    // The nesting bug shipped past the suite because nothing asserted this: every
+    // value in `questions` must carry a `type`, and the gateway 400s without it.
+    const q = buildQuestions(DEFAULT_LABELS, LEAN_QUESTIONS, ARCHETYPE_INSTRUCTIONS);
+    for (const v of Object.values(q)) {
+      expect(['choice', 'score', 'boolean']).toContain(v.type);
+      expect(typeof v.instructions).toBe('string');
+    }
   });
 });
 
@@ -1576,7 +1589,9 @@ describe('callJev', () => {
 });
 
 describe('parseAnswer', () => {
-  const answers = (archetype, lean) => ({ archetype, lean });
+  // `questions` is flat, so lean answers sit beside archetype at the top level
+  // rather than nested under a `lean` key. Spreading mirrors that shape.
+  const answers = (archetype, lean = {}) => ({ archetype, ...lean });
 
   it('accepts a valid choice and keeps probabilities', () => {
     const got = parseAnswer(answers(
@@ -1678,15 +1693,17 @@ export function buildQuestions(labels, leanQuestions, archetypeInstructions) {
   const criteria = {};
   for (const l of labels) criteria[l.key] = l.description;
 
-  const lean = {};
-  for (const [key, instructions] of Object.entries(leanQuestions)) {
-    lean[key] = { type: 'boolean', instructions };
-  }
-
-  return {
+  // FLAT, not nested. `questions` is a map of question id -> question, and each
+  // value must carry its own `type` discriminator. Nesting the lean booleans under
+  // a `lean` key makes the gateway read `questions.lean` as a question with no
+  // `type` and answer 400 "Invalid discriminator value … path: questions.lean.type".
+  const questions = {
     archetype: { type: 'choice', instructions: archetypeInstructions, criteria },
-    lean,
   };
+  for (const [key, instructions] of Object.entries(leanQuestions)) {
+    questions[key] = { type: 'boolean', instructions };
+  }
+  return questions;
 }
 
 export async function callJev({ apiKey, modelId, state, questions, fetchImpl = fetch, endpoint = GATEWAY_ENDPOINT }) {
@@ -1727,8 +1744,12 @@ export function parseAnswer(answers, labels) {
     throw new JevAnswerError(`choice not in label set: ${a.choice}`);
   }
 
+  // The lean answers sit beside `archetype` at the top level, because `questions`
+  // is flat. Every non-archetype question we send is a boolean lean axis, so
+  // anything that parses as one is collected.
   const lean = {};
-  for (const [key, v] of Object.entries((answers && answers.lean) || {})) {
+  for (const [key, v] of Object.entries(answers || {})) {
+    if (key === 'archetype') continue;
     if (v && v.type === 'boolean'
         && typeof v.probability === 'number'
         && v.probability >= 0 && v.probability <= 1) {
@@ -1747,7 +1768,7 @@ export function parseAnswer(answers, labels) {
 - [ ] **Step 4: Run the jev test**
 
 Run: `npx vitest run test/jev.test.js`
-Expected: PASS, 17 tests
+Expected: PASS, 18 tests
 
 - [ ] **Step 5: Run the whole suite**
 
