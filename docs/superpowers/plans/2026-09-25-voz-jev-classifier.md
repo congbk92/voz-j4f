@@ -2439,7 +2439,10 @@ export function formatDuration(ms) {
 }
 
 export function chipColors(family, dark) {
-  const entry = FAMILY_COLORS[family] || FAMILY_COLORS.neutral;
+  // hasOwn, not `||`: inherited keys such as 'constructor' and '__proto__' are
+  // truthy but carry no .light/.dark, so the fallback would not fire and callers
+  // reading .bg would throw.
+  const entry = Object.hasOwn(FAMILY_COLORS, family) ? FAMILY_COLORS[family] : FAMILY_COLORS.neutral;
   return dark ? entry.dark : entry.light;
 }
 
@@ -2498,12 +2501,45 @@ export function chipText(chip, cfg, now = Date.now()) {
 - [ ] **Step 4: Run the chip test**
 
 Run: `npx vitest run test/chip.test.js`
-Expected: PASS, 19 tests
+Expected: PASS, 18 tests (3 formatDuration + 3 chipColors + 8 chipText + 4 buildChipState)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Close the spec's predicate assertion in the store suite**
+
+The design spec's §11 testing section requires, among the chip-rendering cases,
+"that `verbose` does not change the trigger predicate's output". That assertion
+belongs next to the predicate it constrains, so it goes in `test/store.test.js`.
+Add:
+
+```js
+  it('ignores cfg.verbose, which is display-only', () => {
+    const loud = normalize({ ...CFG, verbose: true });
+    const quiet = normalize({ ...CFG, verbose: false });
+    const at = m();
+    const below = m({ posts: m().posts.slice(0, 5), totalPosts: 5 });
+
+    // Same verdict either way, for a member above and below the threshold.
+    for (const member of [at, below]) {
+      expect(shouldClassify({ member, cfg: loud, now, hash: HASH }))
+        .toBe(shouldClassify({ member, cfg: quiet, now, hash: HASH }));
+    }
+    // And the verdicts are not merely equal by both being false.
+    expect(shouldClassify({ member: at, cfg: loud, now, hash: HASH })).toBe(true);
+    expect(shouldClassify({ member: below, cfg: loud, now, hash: HASH })).toBe(false);
+  });
+```
+
+Run: `npx vitest run test/store.test.js`
+Expected: PASS, 30 tests
+
+- [ ] **Step 6: Run the full suite**
+
+Run: `npm test`
+Expected: PASS, 97 tests (78 before this task + 18 chip + 1 predicate)
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add extension/lib/chip.js test/chip.test.js
+git add extension/lib/chip.js test/chip.test.js test/store.test.js
 git commit -m "feat: chip state and text rendering with verbose mode"
 ```
 
