@@ -1,0 +1,13 @@
+{
+  "id": "4242",
+  "name": "example",
+  "totalPosts": 4,
+  "threads": ["[Nóng] Tranh luận về giá điện"],
+  "profile": { "joined": "Nov 12, 2019", "postCount": "4,213" },
+  "posts": [
+    { "postId": "1", "ts": 0, "text": "Theo tôi thì vấn đề này cần nhìn vào số liệu cụ thể. Năm 2023 EVN báo lỗ 26.000 tỷ, nhưng nếu tách riêng chi phí phân phối thì con số khác hẳn. Bác nào có nguồn thì dẫn ra cùng bàn." },
+    { "postId": "2", "ts": 0, "text": "Nói mãi cũng chỉ có mấy câu đó, chả có dẫn chứng gì cả. Chán." },
+    { "postId": "3", "ts": 0, "text": "Việt Nam mình thua xa người ta, ra nước ngoài mà xem họ làm ăn thế nào rồi hãy nói." },
+    { "postId": "4", "ts": 0, "text": "Cái này tôi nghĩ nên đợi cơ quan chức năng công bố đã, mọi người suy đoán nhiều quá." }
+  ]
+}
