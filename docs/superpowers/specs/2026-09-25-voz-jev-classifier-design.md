@@ -97,6 +97,10 @@ Content script → background:
 | `collect` | `{ members: [{ id, name, postId, text, thread, joined, postCount }] }` | `{ labels: { <memberId>: <chipState> } }` |
 | `force` | `{ memberId }` | `{ ok, error? }` |
 | `clear` | `{}` | `{ ok: true }` |
+| `rerender` | `{}` | `{ ok: true }` |
+
+`rerender` is sent by the popup to the active tab after a display-only setting
+changes, so chips re-render without a page reload.
 
 Background → content, unsolicited, after a classification completes:
 
@@ -174,7 +178,8 @@ All state lives in `chrome.storage.local` under two kinds of key.
 
 ```js
 {
-  enabled: true,                 // the popup toggle
+  enabled: true,                 // master switch: gates collection AND classification
+  verbose: false,                // show cache counts and expiry on chips
   apiKey: '',                    // empty = collection on, classification paused
   modelId: 'typesafe-ai/jev',
   labels: [ /* see §7 */ ],
@@ -185,6 +190,13 @@ All state lives in `chrome.storage.local` under two kinds of key.
   labelTtlMs: 604800000          // 7d; 0 disables expiry
 }
 ```
+
+`enabled` gates both collection and classification: when it is off, the extension
+reads nothing from the page and calls nothing. Already-stored data is untouched
+and stays visible in the popup's verbose list (§9).
+
+`verbose` is display-only. It changes what chips and the popup render, and never
+what is collected, sent, or cached — the trigger predicate (§8) does not read it.
 
 ### Member — key `m:<memberId>`
 
@@ -339,11 +351,12 @@ until the trigger conditions are met again or the user forces a re-run.
 
 ### Chips
 
-Injected next to each post's author on voz pages. Three states:
+Injected next to each post's author on voz pages. Four states:
 
 - **labeled** — `[TROLL 62%]` in the label's color; tooltip shows the full
   probability distribution, the evidence count, and when it was classified
 - **collecting** — `[7/10]`, muted; clicking forces an immediate classification
+- **error** — `[!]`, muted; tooltip carries `lastError.message`, clicking retries
 - **nothing** — members with no stored data, and all members when the toggle is off
 
 Chips are inserted into a dedicated container so re-rendering on XenForo's
@@ -359,6 +372,47 @@ mechanism voz uses for its own theme, recorded as a constant in `lib/voz.js`
 once the probe reports it. Until the probe runs, the fallback is
 `prefers-color-scheme`. Text on every chip uses a light or dark foreground
 chosen for contrast against that label's background.
+
+### Verbose mode
+
+A toggle in the popup (`cfg.verbose`, default off) that surfaces the cache state
+behind each chip.
+
+Three terms, because "cached" is overloaded here:
+
+- **cached comments** — `posts.length`, the comments actually stored for that
+  member, i.e. the pool jev draws its 6 posts from
+- **seen comments** — `totalPosts`, every distinct comment ever observed; it
+  exceeds the cached count only once the member passes `maxPostsPerMember`
+- **cache expiry** — `label.at + cfg.labelTtlMs`, the moment the stored label
+  goes stale and the next trigger re-classifies it. `labelTtlMs: 0` means never
+
+Chip text with verbose on:
+
+| member state | verbose off | verbose on |
+|---|---|---|
+| labeled, TTL set | `TROLL 62%` | `TROLL 62% · 13 cmt · còn 4d` |
+| labeled, past the cap | `TROLL 62%` | `TROLL 62% · 20/23 cmt · còn 4d` |
+| labeled, TTL off | `TROLL 62%` | `TROLL 62% · 13 cmt · ∞` |
+| collecting | `7/10` | `7/10` |
+| error | `!` | `! · 13 cmt` |
+
+The `20/23` form — cached over seen — appears only past the cap. Below it the two
+numbers are always equal, so printing both would be noise; the same reason the
+collecting row gains nothing, since `posts.length` is already its numerator.
+
+Expiry renders as a coarse remaining duration (`còn 4d`, `còn 3h`, `còn 2ph`).
+Exact timestamps live in the tooltip, which carries them in both modes — verbose
+exists so the numbers are legible without hovering, not to hide anything.
+
+The popup gains a verbose section: every member with stored data, most comments
+first, each row reading `username · Troll · 13 cmt · còn 4d`. Unlabeled members
+show `chưa phân loại` in place of label and expiry. This list renders from stored
+data regardless of `enabled`, so switching the extension off does not hide what
+it already knows.
+
+Toggling verbose messages the active tab with `rerender` (§4) so chips update
+without a page reload.
 
 ### Popup
 
@@ -430,6 +484,10 @@ the pure modules are unit-tested; DOM injection is verified by hand.
   eviction drops least-recently-seen at `maxMembers`; `threshold` clamps to
   `maxPostsPerMember`.
 - `config.test.js` — defaults, and that unknown keys survive a round-trip.
+- Chip text rendering, one case per row of the verbose table in §9, including the
+  `20/23` form appearing only past the cap and the collecting row never growing a
+  suffix. Plus a `formatDuration` case per unit, and that `verbose` does not
+  change the trigger predicate's output.
 - One trigger-predicate truth table covering every clause: disabled, missing
   key, below threshold, fresh label, changed `labelSetHash`, `reclassifyEvery`
   reached, `labelTtlMs` expired, recent `lastError`, expired `lastError`, and a
@@ -462,6 +520,8 @@ which matters because prompt tuning is the actual point of the project.
 5. `lib/jev.js` + tests.
 6. `lib/store.js` + tests.
 7. `background.js` — store wiring, trigger predicate, queue, gateway call.
-8. `content.js` + `content.css` — extraction, chips, dark theme, MutationObserver.
-9. Options page — label editor, thresholds, caps, test connection.
+8. `content.js` + `content.css` — extraction, chips, verbose chip text, dark
+   theme, MutationObserver.
+9. Popup — master toggle, verbose toggle, verbose per-member cache list. Then the
+   options page: label editor, thresholds, caps, test connection.
 10. Manual end-to-end on a real thread.
