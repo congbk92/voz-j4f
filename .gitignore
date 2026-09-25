@@ -1,0 +1,9 @@
+node_modules/
+.env.local
+.env
+*.local
+
+dist/
+chrome/
+*.zip
+.DS_Store
