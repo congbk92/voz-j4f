@@ -88,6 +88,35 @@ the queue. Content scripts never touch the gateway.
 It loads shared code with `import(chrome.runtime.getURL('lib/voz.js'))`, and
 `lib/*.js` is declared in `web_accessible_resources`.
 
+### Message protocol
+
+Content script → background:
+
+| message | payload | reply |
+|---|---|---|
+| `collect` | `{ members: [{ id, name, postId, text, thread, joined, postCount }] }` | `{ labels: { <memberId>: <chipState> } }` |
+| `force` | `{ memberId }` | `{ ok, error? }` |
+| `clear` | `{}` | `{ ok: true }` |
+
+Background → content, unsolicited, after a classification completes:
+
+```js
+{ type: 'labels', labels: { <memberId>: <chipState> } }
+```
+
+`chipState` is one of:
+
+```js
+{ state: 'labeled',    choice, label, color, probability, evidenceCount, at }
+{ state: 'collecting', count, threshold }
+{ state: 'error',      message }
+```
+
+A member absent from `labels` gets no chip. `collect` is idempotent — after
+dedupe, resending the same page changes nothing — so the content script may send
+freely on every navigation and every mutation batch without tracking what it has
+already reported.
+
 ### Why no bundled SDK
 
 The `ai` package is ~3MB of provider machinery. The one call we need is a plain
@@ -225,20 +254,29 @@ and cfg.apiKey is non-empty
 and m.posts.length >= cfg.threshold
 and ( m.label == null
       or m.label.labelSetHash != hash(cfg.labels)
-      or m.totalPosts - m.label.evidenceCount >= cfg.reclassifyEvery )
-and m.lastError == null or m.lastError is older than 1 hour
+      or m.totalPosts - m.label.evidenceCount >= cfg.reclassifyEvery
+      or (cfg.labelTtlMs > 0 and now - m.label.at >= cfg.labelTtlMs) )
+and ( m.lastError == null or now - m.lastError.at >= 3600000 )
 ```
 
 The first three conditions gate the initial classification. The fourth
-re-classifies when the label is stale (label set changed) or when enough new
-evidence has accrued. Re-classification replaces the stored label; only the
-latest label per member is kept.
+re-classifies a stale label — the label set changed, enough new evidence
+accrued, or the label outlived `labelTtlMs`. Re-classification replaces the
+stored label; only the latest label per member is kept.
+
+`cfg.threshold` may not exceed `cfg.maxPostsPerMember`. The options editor clamps
+it, because `posts` is capped and a threshold above the cap could never be met.
+
+A **forced** classification (the user clicking a chip) ignores `threshold`,
+`reclassifyEvery`, `labelTtlMs`, and `lastError`, but still requires a non-empty
+API key and at least one stored post.
 
 ### State
 
 Built from the member record. At most 6 posts, chosen as the **6 longest** of
-the stored posts, each truncated to **800 characters**. Longest-by-substance
-rather than most-recent, because the same token budget buys more signal.
+the stored posts — ranked by original length, *then* each truncated to
+**800 characters**. Longest-by-substance rather than most-recent, because the
+same token budget buys more signal.
 
 ```js
 {
@@ -250,11 +288,17 @@ rather than most-recent, because the same token budget buys more signal.
 }
 ```
 
-Posts are stored **with quoted blocks removed**. In XenForo, `blockquote`
-content is another member's words; storing it would attach someone else's
-writing to this member's record permanently, and the error would compound as
-more posts accumulate. Quote-stripping is a correctness requirement, not a
-nicety.
+Posts are stored **with quoted blocks removed**, including nested quotes —
+XenForo nests `blockquote` elements when a post quotes a post that quoted
+another. In XenForo, `blockquote` content is another member's words; storing it
+would attach someone else's writing to this member's record permanently, and the
+error would compound as more posts accumulate. Quote-stripping is a correctness
+requirement, not a nicety.
+
+After stripping, a post whose text is shorter than **15 characters** is not
+stored. A post that was nothing but a quote leaves an empty string behind, and
+counting it would inflate `totalPosts` toward the threshold with evidence that
+does not exist.
 
 ### Question
 
@@ -322,6 +366,10 @@ Master toggle (bound to `cfg.enabled`), a status line
 (`Đã phân loại 12 thành viên · 3 đang chờ`), a warning row when the API key is
 missing or rejected, a "clear collected data" button, and a link to options.
 
+"Clear collected data" deletes every `m:*` key and leaves `cfg` untouched, so
+the key and settings survive. It is destructive and not undoable, so it asks for
+confirmation first.
+
 ### Options
 
 API key (password field), model id, label set editor, threshold,
@@ -370,17 +418,22 @@ placeholders for a verified value.
 the pure modules are unit-tested; DOM injection is verified by hand.
 
 - `voz.test.js` — `extractPosts(root)` against a fixture of real post markup
-  captured by the probe: author id and name, post id, quote stripping,
-  truncation, joined/postCount when present and absent, empty page returns `[]`.
-- `jev.test.js` — `buildState` picks the 6 longest and truncates at 800;
-  `buildQuestions` mirrors `cfg.labels`; `parseAnswer` accepts a valid answer,
-  rejects an unknown choice, and tolerates missing probabilities;
-  `labelSetHash` changes when a description changes.
+  captured by the probe: author id and name, post id, quote stripping including
+  nested quotes, truncation, joined/postCount when present and absent, posts
+  under the 15-character floor rejected, empty page returns `[]`.
+- `jev.test.js` — `buildState` picks the 6 longest by original length and
+  truncates at 800; `buildQuestions` mirrors `cfg.labels`; `parseAnswer` accepts
+  a valid answer, rejects an unknown choice, and tolerates missing
+  probabilities; `labelSetHash` changes when a description changes.
 - `store.test.js` — upsert dedupes by `postId`; `posts` caps at
   `maxPostsPerMember` keeping newest; `totalPosts` stays monotonic past the cap;
-  eviction drops least-recently-seen at `maxMembers`; the trigger predicate's
-  truth table.
+  eviction drops least-recently-seen at `maxMembers`; `threshold` clamps to
+  `maxPostsPerMember`.
 - `config.test.js` — defaults, and that unknown keys survive a round-trip.
+- One trigger-predicate truth table covering every clause: disabled, missing
+  key, below threshold, fresh label, changed `labelSetHash`, `reclassifyEvery`
+  reached, `labelTtlMs` expired, recent `lastError`, expired `lastError`, and a
+  forced classification overriding all of the above.
 
 `scripts/classify-cli.ts` runs the same `lib/jev.js` from Node against a JSON
 file of member data, using the existing `dotenv` + `AI_GATEWAY_API_KEY` setup.
