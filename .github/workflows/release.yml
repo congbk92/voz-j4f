@@ -1,0 +1,55 @@
+name: Release
+
+# Pushing a tag is the only way to cut a release, so this stays inert on ordinary
+# commits and no branch push can publish anything.
+on:
+  push:
+    tags: ['v*']
+
+# `gh release create` writes a release; the default token is read-only.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Nothing ships unless the suite is green. Every test is offline — no
+      # network, no credentials — so a flaky connection cannot fail a release.
+      - run: npm test
+
+      # A tag names the artifact a user downloads; the manifest's version is what
+      # Chrome shows them. If those disagree every download is mislabeled, so stop
+      # instead of publishing one.
+      - name: Check the tag matches the extension version
+        run: node scripts/check-tag.mjs "$GITHUB_REF_NAME"
+
+      - run: npm run pack
+
+      # Guard the exact silent-green failure this workflow exists to remove: a
+      # build that reports success and attaches nothing. `unzip -t` also proves
+      # the archive's CRC is intact before it is published.
+      - name: Assert the archive exists and is intact
+        run: |
+          ls -l dist/*.zip
+          unzip -t dist/*.zip
+
+      # Uses the runner's preinstalled gh rather than a third-party action, so
+      # there is no extra supply chain to trust. --verify-tag refuses to invent a
+      # release for a tag that does not exist.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
