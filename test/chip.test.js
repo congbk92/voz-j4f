@@ -5,8 +5,11 @@ import {
 import { normalize } from '../extension/lib/config.js';
 import { DEFAULT_LABELS } from '../extension/lib/labels.js';
 
-const CFG = normalize({ verbose: false });
-const VERBOSE = normalize({ verbose: true });
+// Pinned, not inherited: the collecting cases assert the rendered `7/10`, and
+// taking 10 from a default that is free to move would make them assert the
+// default rather than the renderer.
+const CFG = normalize({ verbose: false, threshold: 10 });
+const VERBOSE = normalize({ ...CFG, verbose: true });
 const NOW = 1_700_000_000_000;
 const DAY = 86400000;
 

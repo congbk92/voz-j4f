@@ -4,7 +4,10 @@ import { normalize, RETRY_AFTER_MS } from '../extension/lib/config.js';
 import { DEFAULT_LABELS, LEAN_QUESTIONS, labelSetHash } from '../extension/lib/labels.js';
 
 const HASH = labelSetHash(DEFAULT_LABELS, LEAN_QUESTIONS);
-const CFG = normalize({ apiKey: 'sk-test' });
+// Thresholds are pinned rather than inherited from DEFAULTS: these cases are
+// about the predicate's arithmetic, and reading 10 off a default that is free to
+// move would quietly redefine what "below the threshold" means under them.
+const CFG = normalize({ apiKey: 'sk-test', threshold: 10, reclassifyEvery: 10 });
 
 function fakeStorage() {
   let data = {};

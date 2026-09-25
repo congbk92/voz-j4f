@@ -45,10 +45,18 @@ additional requests** to voz.vn (no Cloudflare exposure, no rate limits, no
 "which pages matter" guesswork), and the sample improves the longer you browse
 rather than being fixed at whatever one thread happened to contain.
 
-The cost, accepted knowingly: a member you meet once never reaches the threshold
-and never gets labeled, and a fresh thread shows progress bars instead of
-verdicts. A `classify now` affordance (clicking the progress chip) forces a
-verdict immediately, which preserves the ability to test jev on demand.
+The trade is set the other way by default: `threshold` is **1**, so a member is
+labeled from their first stored comment rather than after ten, and a member you
+meet once does get a verdict. The cost moved from coverage to evidence — one
+comment is a thin basis for an archetype, and every new member on a thread is a
+call to the gateway. `reclassifyEvery` is **5**, so a label is revisited once
+five further comments have accrued; set against the 10 it replaces, that is
+roughly twice the re-classification rate for anyone you keep running into.
+
+Both are the user's to trade: raise `threshold` for verdicts resting on more
+evidence, raise `reclassifyEvery` to spend less. A `classify now` affordance
+(clicking the progress chip) forces a verdict below any threshold, which
+preserves the ability to test jev on demand.
 
 ## 4. Components
 
@@ -200,8 +208,8 @@ All state lives in `chrome.storage.local` under two kinds of key.
   apiKey: '',                    // empty = collection on, classification paused
   modelId: 'typesafe-ai/jev',
   labels: [ /* see §7 */ ],
-  threshold: 10,                 // distinct posts before first classification
-  reclassifyEvery: 10,           // new posts since last label before re-running
+  threshold: 1,                  // distinct posts before first classification
+  reclassifyEvery: 5,            // new posts since last label before re-running
   maxPostsPerMember: 20,
   maxMembers: 300,
   labelTtlMs: 604800000          // 7d; 0 disables expiry

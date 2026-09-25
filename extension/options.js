@@ -10,9 +10,9 @@ let labels = [];
 
 /**
  * Read a numeric field, falling back to the default when the field is empty or
- * non-numeric. `Number('')` is 0, and `normalize` clamps 0 up to 1 — so a cleared
- * field would silently set the threshold to a single post and make the extension
- * classify on almost no evidence.
+ * non-numeric. `Number('')` is 0, not NaN, so a cleared field would otherwise
+ * reach `normalize` as a real 0 and be clamped to the field's minimum — silently
+ * meaning "the least possible" rather than "unchanged".
  */
 const num = (id, fallback) => {
   const raw = $(id).value.trim();
