@@ -19,7 +19,8 @@ const CFG_KEY = 'cfg';
 
 export function normalize(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
-  const cap = Math.max(1, Number(cfg.maxPostsPerMember) || DEFAULTS.maxPostsPerMember);
+  const n = Number(cfg.maxPostsPerMember);
+  const cap = Math.max(1, Number.isFinite(n) ? n : DEFAULTS.maxPostsPerMember);
   cfg.maxPostsPerMember = cap;
   cfg.threshold = Math.min(cap, Math.max(1, Number(cfg.threshold) || 1));
   return cfg;

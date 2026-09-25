@@ -55,6 +55,16 @@ describe('normalize', () => {
     expect(normalize({ threshold: -5 }).threshold).toBe(1);
   });
 
+  it('clamps maxPostsPerMember to its bound of 1 instead of treating 0 as missing', () => {
+    expect(normalize({ maxPostsPerMember: 0 }).maxPostsPerMember).toBe(1);
+    expect(normalize({ maxPostsPerMember: -5 }).maxPostsPerMember).toBe(1);
+  });
+
+  it('keeps an explicit maxPostsPerMember above the bound, defaulting only when absent', () => {
+    expect(normalize({ maxPostsPerMember: 50 }).maxPostsPerMember).toBe(50);
+    expect(normalize({}).maxPostsPerMember).toBe(20);
+  });
+
   it('preserves unknown keys so a future version does not wipe them', () => {
     expect(normalize({ somethingNew: 'keep me' }).somethingNew).toBe('keep me');
   });
