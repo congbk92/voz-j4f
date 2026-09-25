@@ -43,6 +43,7 @@ export function buildChipState(member, cfg, now) {
     return {
       state: 'labeled',
       key: member.label.choice,
+      icon: label ? label.icon || '' : '',
       label: label ? label.label : member.label.choice,
       family: label ? label.family : 'neutral',
       probability: typeof prob === 'number' ? prob : null,
@@ -60,22 +61,38 @@ export function buildChipState(member, cfg, now) {
   return { state: 'collecting', count: cached, threshold: cfg.threshold };
 }
 
+/**
+ * The chip's main line: icon and label for a labeled member, the progress count
+ * while collecting, a bang on error. Everything numeric lives in `chipTail`, so
+ * the default view is just the label — the numbers are opt-in, not the identity.
+ */
+export function chipHead(chip) {
+  if (chip.state === 'collecting') return `${chip.count}/${chip.threshold}`;
+  if (chip.state === 'error') return '!';
+  return chip.icon ? `${chip.icon} ${chip.label}` : chip.label;
+}
+
+/**
+ * The verbose second line, and the reason verbose exists. Null whenever there is
+ * nothing to add: with verbose off, and for a collecting chip at any setting —
+ * `posts.length` is already its numerator, so repeating it would be noise.
+ *
+ * `20/23` — cached over seen — appears only past the cap for the same reason:
+ * below it the two numbers are always equal.
+ */
+export function chipTail(chip, cfg, now = Date.now()) {
+  if (!cfg.verbose || chip.state === 'collecting') return null;
+  if (chip.state === 'error') return `${chip.cached} cmt`;
+
+  const parts = [];
+  if (chip.probability != null) parts.push(`${Math.round(chip.probability * 100)}%`);
+  parts.push(chip.seen > chip.cached ? `${chip.cached}/${chip.seen} cmt` : `${chip.cached} cmt`);
+  parts.push(chip.expiresAt === null ? '∞' : `còn ${formatDuration(chip.expiresAt - now)}`);
+  return parts.join(' · ');
+}
+
+/** Head and tail joined, for single-line surfaces such as a popup row. */
 export function chipText(chip, cfg, now = Date.now()) {
-  const pct = (p) => `${Math.round(p * 100)}%`;
-
-  if (chip.state === 'collecting') {
-    // posts.length is already the numerator here, so verbose adds nothing.
-    return `${chip.count}/${chip.threshold}`;
-  }
-
-  if (chip.state === 'error') {
-    return cfg.verbose ? `! · ${chip.cached} cmt` : '!';
-  }
-
-  let text = chip.probability == null ? chip.label : `${chip.label} ${pct(chip.probability)}`;
-  if (!cfg.verbose) return text;
-
-  text += chip.seen > chip.cached ? ` · ${chip.cached}/${chip.seen} cmt` : ` · ${chip.cached} cmt`;
-  if (chip.expiresAt === null) return `${text} · ∞`;
-  return `${text} · còn ${formatDuration(chip.expiresAt - now)}`;
+  const tail = chipTail(chip, cfg, now);
+  return tail ? `${chipHead(chip)} · ${tail}` : chipHead(chip);
 }

@@ -15,11 +15,15 @@
     #members { max-height: 220px; overflow: auto; margin-top: 8px; }
     button { margin-top: 10px; }
     #empty { color: #6b7280; font-style: italic; }
+    /* The detail toggle does nothing while the extension is off, so it is
+       disabled and greyed rather than left looking clickable. */
+    label.off { color: #9ca3af; }
+    label.off input { cursor: not-allowed; }
   </style>
 </head>
 <body>
   <label><input type="checkbox" id="enabled"> Bật thu thập &amp; phân loại</label>
-  <label><input type="checkbox" id="verbose"> Hiện chi tiết cache</label>
+  <label id="verboseRow"><input type="checkbox" id="verbose"> Hiện chi tiết dưới nhãn</label>
   <div id="status">Đang tải…</div>
   <div id="warn" class="warn"></div>
   <div id="members"><div id="empty">Chưa thu thập dữ liệu.</div></div>

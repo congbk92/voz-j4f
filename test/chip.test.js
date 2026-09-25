@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { chipText, formatDuration, chipColors, buildChipState } from '../extension/lib/chip.js';
+import {
+  chipText, chipHead, chipTail, formatDuration, chipColors, buildChipState,
+} from '../extension/lib/chip.js';
 import { normalize } from '../extension/lib/config.js';
+import { DEFAULT_LABELS } from '../extension/lib/labels.js';
 
 const CFG = normalize({ verbose: false });
 const VERBOSE = normalize({ verbose: true });
@@ -56,20 +59,64 @@ describe('chipColors', () => {
   });
 });
 
-describe('chipText', () => {
-  it('shows label and rounded probability when verbose is off', () => {
-    expect(chipText(buildChipState(labeled(), CFG, NOW), CFG)).toBe('Troll 62%');
+const collecting = () => ({
+  id: '1', name: 'bob', totalPosts: 7,
+  posts: Array(7).fill({ postId: 'x', text: 'y'.repeat(30) }),
+  threads: [], profile: {}, label: null, lastError: null,
+});
+
+const errored = () => labeled({
+  label: null,
+  lastError: { code: 401, message: 'API key sai hoặc hết hạn', at: NOW },
+});
+
+describe('chipHead', () => {
+  it('leads with the label icon, so a chip is scannable before it is readable', () => {
+    expect(chipHead(buildChipState(labeled(), CFG, NOW))).toBe('👹 Troll');
   });
 
-  it('omits the percentage when probabilities are missing', () => {
-    const m = labeled({ label: { ...labeled().label, probabilities: null } });
-    expect(chipText(buildChipState(m, CFG, NOW), CFG)).toBe('Troll');
+  it('leaves out the space when a label carries no icon', () => {
+    const cfg = normalize({ labels: DEFAULT_LABELS.map((l) => ({ ...l, icon: '' })) });
+    expect(chipHead(buildChipState(labeled(), cfg, NOW))).toBe('Troll');
   });
 
-  it('appends cached count and remaining TTL when verbose', () => {
+  it('falls back to the bare key, with no icon, for a label outside the set', () => {
+    // A label set edited on the options page no longer contains troll, but a
+    // member cached under the old set can still be rendered before reclassify.
+    const cfg = normalize({
+      labels: [{ key: 'other', icon: '⭐', label: 'Other', family: 'neutral', description: 'x' }],
+    });
+    const s = buildChipState(labeled(), cfg, NOW);
+    expect(s.icon).toBe('');
+    expect(chipHead(s)).toBe('troll');
+  });
+
+  it('shows progress and threshold when collecting', () => {
+    expect(chipHead(buildChipState(collecting(), CFG, NOW))).toBe('7/10');
+  });
+
+  it('shows a bang for an errored member', () => {
+    expect(chipHead(buildChipState(errored(), CFG, NOW))).toBe('!');
+  });
+});
+
+describe('chipTail', () => {
+  it('is null when verbose is off — the default chip is the label alone', () => {
+    expect(chipTail(buildChipState(labeled(), CFG, NOW), CFG, NOW)).toBeNull();
+  });
+
+  it('carries probability, cached count and remaining TTL when verbose', () => {
     const m = labeled({ label: { ...labeled().label, at: NOW - 3 * DAY } });
-    expect(chipText(buildChipState(m, VERBOSE, NOW), VERBOSE, NOW))
-      .toBe('Troll 62% · 13 cmt · còn 4d');
+    expect(chipTail(buildChipState(m, VERBOSE, NOW), VERBOSE, NOW))
+      .toBe('62% · 13 cmt · còn 4d');
+  });
+
+  it('omits the probability when jev returned none, keeping the rest', () => {
+    const m = labeled({
+      label: { ...labeled().label, probabilities: null, at: NOW - 3 * DAY },
+    });
+    expect(chipTail(buildChipState(m, VERBOSE, NOW), VERBOSE, NOW))
+      .toBe('13 cmt · còn 4d');
   });
 
   it('shows cached over seen only once past the cap', () => {
@@ -78,29 +125,41 @@ describe('chipText', () => {
       posts: Array.from({ length: 20 }, (_, i) => ({ postId: String(i), text: 'x'.repeat(30), ts: 0 })),
       label: { ...labeled().label, at: NOW },
     });
-    expect(chipText(buildChipState(m, VERBOSE, NOW), VERBOSE, NOW))
-      .toBe('Troll 62% · 20/23 cmt · còn 7d');
+    expect(chipTail(buildChipState(m, VERBOSE, NOW), VERBOSE, NOW))
+      .toBe('62% · 20/23 cmt · còn 7d');
   });
 
   it('shows the infinity mark when the TTL is disabled', () => {
     const cfg = normalize({ verbose: true, labelTtlMs: 0 });
-    expect(chipText(buildChipState(labeled(), cfg, NOW), cfg)).toBe('Troll 62% · 13 cmt · ∞');
+    expect(chipTail(buildChipState(labeled(), cfg, NOW), cfg, NOW))
+      .toBe('62% · 13 cmt · ∞');
   });
 
-  it('shows progress and threshold when collecting', () => {
-    const m = { id: '1', name: 'bob', totalPosts: 7, posts: Array(7).fill({ postId: 'x', text: 'y'.repeat(30) }), threads: [], profile: {}, label: null, lastError: null };
-    expect(chipText(buildChipState(m, CFG, NOW), CFG)).toBe('7/10');
+  it('stays null for a collecting chip, even in verbose', () => {
+    // posts.length is already the numerator, so there is nothing to add.
+    expect(chipTail(buildChipState(collecting(), VERBOSE, NOW), VERBOSE, NOW)).toBeNull();
   });
 
-  it('never appends a suffix to a collecting chip, even in verbose', () => {
-    const m = { id: '1', name: 'bob', totalPosts: 7, posts: Array(7).fill({ postId: 'x', text: 'y'.repeat(30) }), threads: [], profile: {}, label: null, lastError: null };
-    expect(chipText(buildChipState(m, VERBOSE, NOW), VERBOSE)).toBe('7/10');
+  it('shows the cached count for an errored member', () => {
+    expect(chipTail(buildChipState(errored(), VERBOSE, NOW), VERBOSE, NOW)).toBe('13 cmt');
+  });
+});
+
+describe('chipText', () => {
+  it('joins head and tail, for single-line surfaces such as a popup row', () => {
+    const m = labeled({ label: { ...labeled().label, at: NOW - 3 * DAY } });
+    expect(chipText(buildChipState(m, VERBOSE, NOW), VERBOSE, NOW))
+      .toBe('👹 Troll · 62% · 13 cmt · còn 4d');
   });
 
-  it('shows a bang and the cached count for an errored member', () => {
-    const m = labeled({ label: null, lastError: { code: 401, message: 'API key sai hoặc hết hạn', at: NOW } });
-    expect(chipText(buildChipState(m, CFG, NOW), CFG)).toBe('!');
-    expect(chipText(buildChipState(m, VERBOSE, NOW), VERBOSE)).toBe('! · 13 cmt');
+  it('is the head alone when there is no tail', () => {
+    expect(chipText(buildChipState(labeled(), CFG, NOW), CFG)).toBe('👹 Troll');
+    expect(chipText(buildChipState(collecting(), VERBOSE, NOW), VERBOSE)).toBe('7/10');
+  });
+
+  it('is the bang plus the cached count for an errored member', () => {
+    expect(chipText(buildChipState(errored(), CFG, NOW), CFG)).toBe('!');
+    expect(chipText(buildChipState(errored(), VERBOSE, NOW), VERBOSE)).toBe('! · 13 cmt');
   });
 });
 

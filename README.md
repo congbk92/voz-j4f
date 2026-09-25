@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/avatar.svg" alt="" width="120" height="120">
+</p>
+
 # voz-j4f
 
 Labels members of [voz.vn](https://voz.vn) with an archetype ("Troll", "Thánh",

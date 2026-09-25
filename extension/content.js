@@ -1,5 +1,5 @@
 (async () => {
-  const [{ extractPosts, memberIdOf }, { chipText, chipColors }, { createConfig }] = await Promise.all([
+  const [{ extractPosts, memberIdOf }, { chipHead, chipTail, chipColors }, { createConfig }] = await Promise.all([
     import(chrome.runtime.getURL('lib/voz.js')),
     import(chrome.runtime.getURL('lib/chip.js')),
     import(chrome.runtime.getURL('lib/config.js')),
@@ -22,14 +22,32 @@
   const chipHost = (el) =>
     el.querySelector('.message-name') || el.querySelector('.message-cell--user');
 
+  const span = (cls) => {
+    const el = document.createElement('span');
+    el.className = cls;
+    return el;
+  };
+
   function renderChip(host, chip, memberId) {
     let node = host.querySelector('.jev-chip');
     if (!node) {
       node = document.createElement('span');
       node.className = 'jev-chip';
+      node.append(span('jev-chip-head'), span('jev-chip-tail'));
       host.appendChild(node);
     }
-    node.textContent = chipText(chip, { verbose }, Date.now());
+
+    // Two elements, not one text node: verbose stacks its numbers *under* the
+    // label rather than trailing it, so the label is what you scan and the
+    // detail is what you read when you stop on a chip.
+    const now = Date.now();
+    const tail = chipTail(chip, { verbose }, now);
+    node.querySelector('.jev-chip-head').textContent = chipHead(chip);
+    const tailEl = node.querySelector('.jev-chip-tail');
+    tailEl.textContent = tail || '';
+    tailEl.hidden = !tail;
+    node.classList.toggle('jev-chip--stacked', !!tail);
+
     node.dataset.state = chip.state;
     node.dataset.member = memberId;
 

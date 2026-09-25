@@ -196,7 +196,7 @@ All state lives in `chrome.storage.local` under two kinds of key.
 ```js
 {
   enabled: true,                 // master switch: gates collection AND classification
-  verbose: false,                // show cache counts and expiry on chips
+  verbose: false,                // show confidence, cache counts and expiry under chips
   apiKey: '',                    // empty = collection on, classification paused
   modelId: 'typesafe-ai/jev',
   labels: [ /* see §7 */ ],
@@ -272,24 +272,24 @@ Sixteen defaults — the forum's own slang plus a few general archetypes — edi
 on the options page. jev takes `criteria` as an arbitrary non-empty map of name →
 free-text description, so the whole set is data.
 
-| key | label | family | description |
-|---|---|---|---|
-| `thanh` | Thánh | positive | Kiến thức sâu, dẫn chứng cụ thể, giải đáp thắc mắc cho người khác |
-| `nghiem_tuc` | Nghiêm túc | positive | Thảo luận đàng hoàng, trung lập, có lý lẽ, không công kích cá nhân |
-| `ca_khia` | Cà khịa | neutral | Mỉa mai, chọc ngoáy, nói lái — nhưng vẫn có nội dung và quan điểm |
-| `spam` | Spam/bot | neutral | Quảng cáo, rao bán, lặp lại một nội dung, hoặc vô nghĩa hoàn toàn |
-| `giao_su_mom` | Giáo sư mõm | negative | Thích lên lớp nhưng kiến thức rỗng, nói suông, không dẫn chứng |
-| `thanh_chui` | Thánh chửi | negative | Nổi tiếng vì chửi bới, công kích cá nhân, hạ nhục người khác |
-| `troll` | Troll | negative | Cố tình gây tranh cãi, chọc tức, phá thread, không đóng góp nội dung |
-| `trau` | Trẩu / Trẻ trâu | negative | Người trẻ, nông nổi, phát ngôn thiếu chín chắn |
-| `wumao` | Wumao | negative | Nói sáo rỗng, a dua theo số đông, "bài viết hay quá", không có ý kiến riêng |
-| `bo_do` | Bò đỏ | political | Bảo vệ quan điểm Đảng/Nhà nước VN |
-| `ro_tau` | Rồ tàu | political | Thân Trung Quốc, bênh vực chính sách TQ |
-| `ro_meo` | Rồ mẽo | political | Thân Mỹ, ca ngợi dân chủ phương Tây |
-| `ba_que` | 3 củ / 3que | political | Chống cộng; gốc "cờ vàng ba sọc" |
-| `tu_nhuc` | Tự nhục | political | Tự hạ thấp dân tộc hoặc bản thân người Việt |
-| `sinh_ngoai` | Sính ngoại | political | Ưa chuộng nước ngoài quá mức |
-| `ech_xanh` | Ếch xanh | political | Ngây thơ, thiếu hiểu biết chính trị |
+| key | icon | label | family | description |
+|---|---|---|---|---|
+| `thanh` | 🧠 | Thánh | positive | Kiến thức sâu, dẫn chứng cụ thể, giải đáp thắc mắc cho người khác |
+| `nghiem_tuc` | 🧐 | Nghiêm túc | positive | Thảo luận đàng hoàng, trung lập, có lý lẽ, không công kích cá nhân |
+| `ca_khia` | 🌶️ | Cà khịa | neutral | Mỉa mai, chọc ngoáy, nói lái — nhưng vẫn có nội dung và quan điểm |
+| `spam` | 🤖 | Spam/bot | neutral | Quảng cáo, rao bán, lặp lại một nội dung, hoặc vô nghĩa hoàn toàn |
+| `giao_su_mom` | 🎓 | Giáo sư mõm | negative | Thích lên lớp nhưng kiến thức rỗng, nói suông, không dẫn chứng |
+| `thanh_chui` | 🤬 | Thánh chửi | negative | Nổi tiếng vì chửi bới, công kích cá nhân, hạ nhục người khác |
+| `troll` | 👹 | Troll | negative | Cố tình gây tranh cãi, chọc tức, phá thread, không đóng góp nội dung |
+| `trau` | 🐃 | Trẩu / Trẻ trâu | negative | Người trẻ, nông nổi, phát ngôn thiếu chín chắn |
+| `wumao` | 💰 | Wumao | negative | Nói sáo rỗng, a dua theo số đông, "bài viết hay quá", không có ý kiến riêng |
+| `bo_do` | 🐂 | Bò đỏ | political | Bảo vệ quan điểm Đảng/Nhà nước VN |
+| `ro_tau` | 🐉 | Rồ tàu | political | Thân Trung Quốc, bênh vực chính sách TQ |
+| `ro_meo` | 🦅 | Rồ mẽo | political | Thân Mỹ, ca ngợi dân chủ phương Tây |
+| `ba_que` | 💛 | 3 củ / 3que | political | Chống cộng; gốc "cờ vàng ba sọc" |
+| `tu_nhuc` | 🙇 | Tự nhục | political | Tự hạ thấp dân tộc hoặc bản thân người Việt |
+| `sinh_ngoai` | ✈️ | Sính ngoại | political | Ưa chuộng nước ngoài quá mức |
+| `ech_xanh` | 🐸 | Ếch xanh | political | Ngây thơ, thiếu hiểu biết chính trị |
 
 Colors are assigned **per family**, not per label: four hues (positive, neutral,
 negative, political) with light and dark variants. Sixteen distinguishable hues
@@ -302,6 +302,14 @@ The political family deliberately shares one hue even though `bo_do` and `ba_que
 are opposites. Distinguishing them by color alone would imply the chip is a
 verdict on the view rather than a description of it, and they are only told apart
 by reading the label.
+
+`icon` is the one purely cosmetic field: a short string (an emoji by default)
+rendered before the label on every chip and popup row. It is editable in the
+label editor like any other column, and it is deliberately **not** part of
+`labelSetHash` — changing an icon changes nothing about what jev is asked, so it
+must not mark cached labels incomparable and trigger a paid re-classification.
+Each default label carries a distinct icon, since two labels sharing one would
+defeat the point of having them.
 
 Rules the editor enforces:
 
@@ -456,9 +464,10 @@ until the trigger conditions are met again or the user forces a re-run.
 
 Injected next to each post's author on voz pages. Four states:
 
-- **labeled** — `[TROLL 62%]` in the label's color; tooltip shows the full
-  probability distribution, the six leaning probabilities, the evidence count,
-  and when it was classified
+- **labeled** — `[👹 TROLL]` in the label's color; the icon and the label are the
+  whole chip by default, and verbose adds the numbers as a second line beneath
+  it. Tooltip shows the full probability distribution, the six leaning
+  probabilities, the evidence count, and when it was classified
 - **collecting** — `[7/10]`, muted; clicking forces an immediate classification
 - **error** — `[!]`, muted; tooltip carries `lastError.message`, clicking retries
 - **nothing** — members with no stored data, and all members when the toggle is off
@@ -500,15 +509,23 @@ Three terms, because "cached" is overloaded here:
 - **cache expiry** — `label.at + cfg.labelTtlMs`, the moment the stored label
   goes stale and the next trigger re-classifies it. `labelTtlMs: 0` means never
 
-Chip text with verbose on:
+A chip has a **main line** — the icon and the label — and, when verbose, a
+**detail line** stacked *below* it. The label is what you scan past; the numbers
+are what you stop on. Percentages stay off the main line because a chip is a
+verdict on a member, not a readout: the confidence belongs with the evidence
+counts that qualify it, not bolted to the name.
 
 | member state | verbose off | verbose on |
 |---|---|---|
-| labeled, TTL set | `TROLL 62%` | `TROLL 62% · 13 cmt · còn 4d` |
-| labeled, past the cap | `TROLL 62%` | `TROLL 62% · 20/23 cmt · còn 4d` |
-| labeled, TTL off | `TROLL 62%` | `TROLL 62% · 13 cmt · ∞` |
+| labeled, TTL set | `👹 TROLL` | `👹 TROLL`<br>`62% · 13 cmt · còn 4d` |
+| labeled, past the cap | `👹 TROLL` | `👹 TROLL`<br>`62% · 20/23 cmt · còn 4d` |
+| labeled, TTL off | `👹 TROLL` | `👹 TROLL`<br>`62% · 13 cmt · ∞` |
+| labeled, no probability | `👹 TROLL` | `👹 TROLL`<br>`13 cmt · còn 4d` |
 | collecting | `7/10` | `7/10` |
-| error | `!` | `! · 13 cmt` |
+| error | `!` | `!`<br>`13 cmt` |
+
+Surfaces with no room for a second line — popup rows — join the two with ` · `,
+so each row above reads as one string there.
 
 The `20/23` form — cached over seen — appears only past the cap. Below it the two
 numbers are always equal, so printing both would be noise; the same reason the
@@ -519,10 +536,12 @@ Exact timestamps live in the tooltip, which carries them in both modes — verbo
 exists so the numbers are legible without hovering, not to hide anything.
 
 The popup gains a verbose section: every member with stored data, most comments
-first, each row reading `username · Troll · 13 cmt · còn 4d`. Unlabeled members
-show `chưa phân loại` in place of label and expiry. This list renders from stored
-data regardless of `enabled`, so switching the extension off does not hide what
-it already knows.
+first, each row reading `username · 👹 Troll` on the left with its numbers on the
+right — `13 cmt · còn 4d` under verbose, the bare count otherwise. Verbose
+replaces that count rather than appending to it, so a row never prints the same
+number twice. Unlabeled members show `chưa phân loại` in place of label and
+expiry. This list renders from stored data regardless of `enabled`, so switching
+the extension off does not hide what it already knows.
 
 Toggling verbose writes config, which the content script observes via
 `chrome.storage.onChanged` (§4) so chips update
@@ -533,6 +552,12 @@ without a page reload.
 Master toggle (bound to `cfg.enabled`), a status line
 (`Đã phân loại 12 thành viên · 3 đang chờ`), a warning row when the API key is
 missing or rejected, a "clear collected data" button, and a link to options.
+
+A second toggle (bound to `cfg.verbose`) controls the chips' detail line. It is
+disabled and greyed while the master toggle is off, because the page then renders
+no chips for it to add detail to — a live-looking control that changes nothing
+visible is worse than one that says so. The member list above stays readable in
+both states (§Verbose mode).
 
 "Clear collected data" deletes every `m:*` key and leaves `cfg` untouched, so
 the key and settings survive. It is destructive and not undoable, so it asks for
