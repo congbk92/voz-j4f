@@ -69,7 +69,7 @@ extension/
 test/                vitest + jsdom
 scripts/
   probe.js           DevTools console snippet — dumps real voz DOM structure
-  classify-cli.ts    Node CLI: classify a member JSON without the extension
+  classify-cli.mjs    Node CLI: classify a member JSON without the extension
   build.mjs          validates the manifest, copies to dist/, writes a zip
 ```
 
@@ -113,7 +113,7 @@ Background → content, unsolicited, after a classification completes:
 `chipState` is one of:
 
 ```js
-{ state: 'labeled',    choice, label, color, probability, evidenceCount, at }
+{ state: 'labeled',    key, label, family, probability, lean, cached, seen, expiresAt }
 { state: 'collecting', count, threshold }
 { state: 'error',      message }
 ```
@@ -126,8 +126,8 @@ already reported.
 ### Why no bundled SDK
 
 The `ai` package is ~3MB of provider machinery. The one call we need is a plain
-REST request, verified against the installed SDK source
-(`@ai-sdk/gateway/dist/index.js`, `GatewayEvaluationModel.doEvaluate`):
+REST request, **captured from the installed SDK's `fetch`** — not read from its
+source. See the note below for why that distinction cost three attempts:
 
 ```
 POST https://ai-gateway.vercel.sh/v4/ai/evaluation-model
@@ -630,7 +630,7 @@ the pure modules are unit-tested; DOM injection is verified by hand.
   reached, `labelTtlMs` expired, recent `lastError`, expired `lastError`, and a
   forced classification overriding all of the above.
 
-`scripts/classify-cli.ts` runs the same `lib/jev.js` from Node against a JSON
+`scripts/classify-cli.mjs` runs the same `lib/jev.js` from Node against a JSON
 file of member data, using the existing `dotenv` + `AI_GATEWAY_API_KEY` setup.
 This lets prompt and label iteration happen without reloading the extension,
 which matters because prompt tuning is the actual point of the project.
@@ -695,7 +695,7 @@ nothing" usually means a missed reload.
 2. Extension skeleton: manifest, `config.js`, popup toggle, options shell, and
    `scripts/build.mjs` (§13) so the extension can be loaded from the first commit.
 3. `lib/voz.js` + tests, against probe-confirmed markup.
-4. `scripts/classify-cli.ts` — prove the jev round trip from Node, including the
+4. `scripts/classify-cli.mjs` — prove the jev round trip from Node, including the
    `archetype` + `lean` questions, before any UI exists. Prompt and label tuning
    happens here.
 5. `lib/jev.js` + tests.
