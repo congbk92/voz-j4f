@@ -22,6 +22,21 @@ export function normalize(raw) {
   const n = Number(cfg.maxPostsPerMember);
   const cap = Math.max(1, Number.isFinite(n) ? n : DEFAULTS.maxPostsPerMember);
   cfg.maxPostsPerMember = cap;
+
+  // Every count below floors at 1. A zero is not a smaller setting, it is a broken
+  // one — both are reachable by typing 0 into the options page:
+  //   maxMembers 0      -> eviction computes excess = all.length and drops EVERY
+  //                        stored member, including the batch just written.
+  //   reclassifyEvery 0 -> `totalPosts - evidenceCount < 0` is never true, so no
+  //                        label is ever fresh and every collect re-classifies
+  //                        every member above the threshold: unbounded gateway spend.
+  // Clamped here because `normalize` is the single funnel every config read and
+  // write passes through, so it binds every writer, not just the options page.
+  const nMembers = Number(cfg.maxMembers);
+  cfg.maxMembers = Math.max(1, Number.isFinite(nMembers) ? nMembers : DEFAULTS.maxMembers);
+  const nReclassify = Number(cfg.reclassifyEvery);
+  cfg.reclassifyEvery = Math.max(1, Number.isFinite(nReclassify) ? nReclassify : DEFAULTS.reclassifyEvery);
+
   cfg.threshold = Math.min(cap, Math.max(1, Number(cfg.threshold) || 1));
   return cfg;
 }

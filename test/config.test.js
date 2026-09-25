@@ -65,6 +65,18 @@ describe('normalize', () => {
     expect(normalize({}).maxPostsPerMember).toBe(20);
   });
 
+  it('clamps maxMembers to at least 1, since 0 would evict every stored member', () => {
+    expect(normalize({ maxMembers: 0 }).maxMembers).toBe(1);
+    expect(normalize({ maxMembers: -5 }).maxMembers).toBe(1);
+    expect(normalize({ maxMembers: 50 }).maxMembers).toBe(50);
+  });
+
+  it('clamps reclassifyEvery to at least 1, since 0 would make every label permanently stale', () => {
+    expect(normalize({ reclassifyEvery: 0 }).reclassifyEvery).toBe(1);
+    expect(normalize({ reclassifyEvery: -5 }).reclassifyEvery).toBe(1);
+    expect(normalize({ reclassifyEvery: 25 }).reclassifyEvery).toBe(25);
+  });
+
   it('preserves unknown keys so a future version does not wipe them', () => {
     expect(normalize({ somethingNew: 'keep me' }).somethingNew).toBe('keep me');
   });
