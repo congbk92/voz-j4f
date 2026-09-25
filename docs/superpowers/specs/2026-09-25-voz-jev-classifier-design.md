@@ -431,6 +431,15 @@ Injected next to each post's author on voz pages. Four states:
 - **error** — `[!]`, muted; tooltip carries `lastError.message`, clicking retries
 - **nothing** — members with no stored data, and all members when the toggle is off
 
+A label and an error can coexist, because a failed re-classification leaves
+`lastError` set while deliberately keeping the last good label — `setError` does
+not clear it. So the states are not simply decided in the order above: an error
+**newer than the label** wins. Without that rule a stale label permanently masks
+the failure, and the error state becomes unreachable for any member that has ever
+been labeled — which is precisely the member most likely to hit a failed refresh.
+An error older than the label is ignored, since the label then reflects a later,
+successful run.
+
 Chips are inserted into a dedicated container so re-rendering on XenForo's
 AJAX navigations does not duplicate them, and a `MutationObserver` handles
 infinite scroll and page transitions.

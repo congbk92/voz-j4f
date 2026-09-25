@@ -2333,7 +2333,17 @@ describe('chipColors', () => {
     expect(chipColors('negative', true)).toEqual({ bg: '#7f1d1d', fg: '#fecaca' });
   });
   it('falls back to neutral for an unknown family', () => {
-    expect(chipColors('nonsense', false)).toEqual(chipColors('neutral', false));
+    // Literals, not chipColors('neutral', …): comparing the function against
+    // itself passes even if it returns undefined for both arguments.
+    expect(chipColors('nonsense', false)).toEqual({ bg: '#e2e8f0', fg: '#334155' });
+    expect(chipColors('nonsense', true)).toEqual({ bg: '#334155', fg: '#e2e8f0' });
+  });
+
+  it('falls back for inherited Object keys, which are truthy but carry no variants', () => {
+    // `FAMILY_COLORS[family] || FAMILY_COLORS.neutral` returns Object itself for
+    // these, so the fallback never fires and callers reading .bg would throw.
+    expect(chipColors('constructor', false)).toEqual(chipColors('neutral', false));
+    expect(chipColors('toString', true)).toEqual(chipColors('neutral', true));
   });
 });
 
@@ -2407,6 +2417,24 @@ describe('buildChipState', () => {
     const m = labeled({ label: { ...labeled().label, lean: undefined } });
     expect(buildChipState(m, CFG, NOW).lean).toEqual({});
   });
+
+  it('lets a newer error win over the stale label it failed to refresh', () => {
+    const m = labeled({
+      label: { ...labeled().label, at: NOW - 8 * DAY },
+      lastError: { code: 401, message: 'API key sai hoặc hết hạn', at: NOW },
+    });
+    const s = buildChipState(m, CFG, NOW);
+    expect(s.state).toBe('error');
+    expect(s.message).toBe('API key sai hoặc hết hạn');
+  });
+
+  it('keeps the label when the last error predates it', () => {
+    const m = labeled({
+      label: { ...labeled().label, at: NOW },
+      lastError: { code: 429, message: 'slow down', at: NOW - 2 * DAY },
+    });
+    expect(buildChipState(m, CFG, NOW).state).toBe('labeled');
+  });
 });
 ```
 
@@ -2450,7 +2478,14 @@ export function chipColors(family, dark) {
 export function buildChipState(member, cfg, now) {
   const cached = member.posts.length;
 
-  if (member.label) {
+  // A label and an error coexist when a re-classification fails: setError keeps
+  // the last good label. An error newer than the label must win, or the stale
+  // label masks the failure and the error state is unreachable for anyone who
+  // has ever been labeled — the member most likely to hit a failed refresh.
+  const failedSinceLabel = member.lastError
+    && (!member.label || member.lastError.at > member.label.at);
+
+  if (member.label && !failedSinceLabel) {
     const label = (cfg.labels || []).find((l) => l.key === member.label.choice) || null;
     const prob = member.label.probabilities
       ? member.label.probabilities[member.label.choice]
@@ -2501,7 +2536,7 @@ export function chipText(chip, cfg, now = Date.now()) {
 - [ ] **Step 4: Run the chip test**
 
 Run: `npx vitest run test/chip.test.js`
-Expected: PASS, 18 tests (3 formatDuration + 3 chipColors + 8 chipText + 4 buildChipState)
+Expected: PASS, 21 tests (3 formatDuration + 4 chipColors + 8 chipText + 6 buildChipState)
 
 - [ ] **Step 5: Close the spec's predicate assertion in the store suite**
 
@@ -2534,7 +2569,7 @@ Expected: PASS, 30 tests
 - [ ] **Step 6: Run the full suite**
 
 Run: `npm test`
-Expected: PASS, 97 tests (78 before this task + 18 chip + 1 predicate)
+Expected: PASS, 100 tests (78 before this task + 21 chip + 1 predicate)
 
 - [ ] **Step 7: Commit**
 
