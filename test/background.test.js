@@ -40,9 +40,14 @@ const memberRecord = (over = {}) => ({
   profile: {}, label: null, lastError: null, lastSeenAt: 0, ...over,
 });
 
+/**
+ * Monotonic deadline, deliberately not `Date.now()`: this sandbox's wall clock
+ * steps forward under load, which makes a wall-clock deadline expire early and
+ * turns a wait into a spurious failure.
+ */
 async function waitFor(fn, ms = 2000) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
+  const deadline = performance.now() + ms;
+  while (performance.now() < deadline) {
     if (await fn()) return true;
     await new Promise((r) => setTimeout(r, 5));
   }
@@ -65,7 +70,11 @@ async function boot({ cfg = {}, seed = [], respond } = {}) {
   storage = fakeStorage(initial);
   listener = null;
   sentToTabs = [];
+  // Per-boot arrays, captured by the stub below rather than read off the module
+  // binding: a worker left over from an earlier test would otherwise push its
+  // stale calls into this test's count.
   fetchCalls = [];
+  const calls = fetchCalls;
 
   globalThis.chrome = {
     storage: { local: storage },
@@ -75,7 +84,7 @@ async function boot({ cfg = {}, seed = [], respond } = {}) {
     },
   };
   globalThis.fetch = vi.fn(async (url, init) => {
-    fetchCalls.push({ url, init });
+    calls.push({ url, init });
     return (respond || (() => okResponse()))(url, init);
   });
 
@@ -149,18 +158,18 @@ describe('background worker', () => {
   });
 
   it('retries a 429 and stores the label once the gateway recovers', async () => {
-    let calls = 0;
+    let attempt = 0;
     await boot({
       respond: () => {
-        calls += 1;
-        return calls === 1 ? errResponse(429, 'slow down') : okResponse();
+        attempt += 1;
+        return attempt === 1 ? errResponse(429, 'slow down') : okResponse();
       },
     });
     await send({ type: 'collect', members: batch(12) });
 
-    // The retry backs off a real 500ms, per §8. Nothing here asserts that timing;
-    // it is only the wait the retry policy itself imposes.
-    expect(await waitFor(async () => (await storedMember())?.label, 5000)).toBe(true);
+    // The retry honours §8's ~500ms backoff, which is the only reason this wait
+    // is not instantaneous. That duration is not itself asserted.
+    expect(await waitFor(async () => (await storedMember())?.label, 10000)).toBe(true);
     expect(fetchCalls).toHaveLength(2);
     expect((await storedMember()).lastError).toBeNull();
   });
@@ -169,7 +178,8 @@ describe('background worker', () => {
     await boot({ respond: () => errResponse(503, 'unavailable') });
     await send({ type: 'collect', members: batch(12) });
 
-    expect(await waitFor(async () => (await storedMember())?.lastError, 5000)).toBe(true);
+    // ~1.5s of backoff for the three attempts, again not asserted as a duration.
+    expect(await waitFor(async () => (await storedMember())?.lastError, 10000)).toBe(true);
     expect(fetchCalls).toHaveLength(3);   // the attempt plus two retries
     expect((await storedMember()).lastError.code).toBe(503);
     expect((await storedMember()).label).toBeNull();

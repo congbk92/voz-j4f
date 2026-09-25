@@ -5,9 +5,14 @@ import { fileURLToPath } from 'node:url';
 
 const EXT = join(dirname(fileURLToPath(import.meta.url)), '..', 'extension');
 
+/**
+ * Monotonic deadline, deliberately not `Date.now()`: this sandbox's wall clock
+ * steps forward under load, which makes a wall-clock deadline expire early and
+ * turns a wait into a spurious failure.
+ */
 async function waitFor(fn, ms = 2000) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
+  const deadline = performance.now() + ms;
+  while (performance.now() < deadline) {
     if (fn()) return true;
     await new Promise((r) => setTimeout(r, 5));
   }
