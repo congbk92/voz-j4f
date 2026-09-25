@@ -258,4 +258,20 @@ describe('shouldClassify', () => {
     const noPosts = m({ posts: [], totalPosts: 0 });
     expect(shouldClassify({ member: noPosts, cfg: CFG, now, hash: HASH, force: true })).toBe(false);
   });
+
+  it('ignores cfg.verbose, which is display-only', () => {
+    const loud = normalize({ ...CFG, verbose: true });
+    const quiet = normalize({ ...CFG, verbose: false });
+    const at = m();
+    const below = m({ posts: m().posts.slice(0, 5), totalPosts: 5 });
+
+    // Same verdict either way, for a member above and below the threshold.
+    for (const member of [at, below]) {
+      expect(shouldClassify({ member, cfg: loud, now, hash: HASH }))
+        .toBe(shouldClassify({ member, cfg: quiet, now, hash: HASH }));
+    }
+    // And the verdicts are not merely equal by both being false.
+    expect(shouldClassify({ member: at, cfg: loud, now, hash: HASH })).toBe(true);
+    expect(shouldClassify({ member: below, cfg: loud, now, hash: HASH })).toBe(false);
+  });
 });
