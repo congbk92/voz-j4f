@@ -47,6 +47,9 @@ npm run classify  # classify from the command line (reads .env.local)
 `npm run build` leaves `dist/` as a load-unpacked folder — point **Load unpacked**
 at it to try a build. `npm run pack` additionally writes the release archive.
 
+The suite also runs in CI on every push to `master` and on every pull request, via
+`.github/workflows/ci.yml`. It needs no key and no network.
+
 The CLI scripts read `AI_GATEWAY_API_KEY` from `.env.local`, which is gitignored.
 The extension does not use it; the extension's key comes from the options page.
 
