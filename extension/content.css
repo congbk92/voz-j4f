@@ -2,6 +2,7 @@
   --jev-chip-radius: 999px;
   --jev-chip-font: 11px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
 .jev-chip {
   display: inline-block;
   margin-left: 6px;
@@ -12,5 +13,20 @@
   white-space: nowrap;
   vertical-align: middle;
   cursor: pointer;
+  user-select: none;
 }
-.jev-chip--muted { opacity: 0.75; font-weight: 500; }
+
+.jev-chip--muted {
+  opacity: 0.75;
+  font-weight: 500;
+  border: 1px solid currentColor;
+}
+
+.jev-chip[data-state="error"] {
+  color: #991b1b !important;
+  border-color: #991b1b;
+}
+
+@media (prefers-color-scheme: dark) {
+  .jev-chip[data-state="error"] { color: #fecaca !important; border-color: #fecaca; }
+}
