@@ -13,9 +13,12 @@ const emptyMember = (id, name) => ({
 export function shouldClassify({ member, cfg, now, hash, force = false }) {
   if (!member || !cfg.apiKey) return false;
   if (!member.posts || member.posts.length === 0) return false;
-  if (force) return true;
-
+  // `enabled` gates force too, so it is checked BEFORE the force short-circuit.
+  // Spec §7 promises that with the toggle off the extension calls nothing, and a
+  // forced classification spends against the gateway like any other. Anything the
+  // force flag bypasses is named below, deliberately and exhaustively.
   if (!cfg.enabled) return false;
+  if (force) return true;
   if (member.posts.length < cfg.threshold) return false;
 
   const l = member.label;

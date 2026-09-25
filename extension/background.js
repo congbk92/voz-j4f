@@ -142,7 +142,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const member = await store.getMember(msg.memberId);
         if (!member) { sendResponse({ ok: false, error: 'unknown member' }); return; }
         if (!shouldClassify({ member, cfg, now: Date.now(), hash, force: true })) {
-          sendResponse({ ok: false, error: cfg.apiKey ? 'no posts collected' : 'missing API key' });
+          // Named from the condition that actually failed. A force is refused by
+          // exactly three things — no key, no stored posts, and the master switch
+          // — so a ternary over `apiKey` would tell a user with a good key and the
+          // toggle off that their API key is missing (spec §8's trigger gained the
+          // `enabled` gate; §7 promises the switch stops spending).
+          let error = 'no posts collected';
+          if (!cfg.apiKey) error = 'missing API key';
+          else if (!cfg.enabled) error = 'disabled';
+          sendResponse({ ok: false, error });
           return;
         }
         watch(msg.memberId, sender.tab && sender.tab.id);

@@ -58,6 +58,11 @@
         : `Đã thu thập ${chip.count}/${chip.threshold} bình luận — bấm để phân loại ngay`;
   }
 
+  /** Spec §9: with the toggle off, members show nothing. */
+  function clearChips() {
+    for (const node of document.querySelectorAll('.jev-chip')) node.remove();
+  }
+
   /** Idempotent: repaints every post whose member has a state. */
   function paint() {
     for (const el of document.querySelectorAll(POST_SEL)) {
@@ -104,6 +109,17 @@
         paint();
       });
     }
+  });
+
+  // Config can change from the popup OR the options page, and neither knows which
+  // tabs are open. Reacting to storage covers both, and covers threshold and label
+  // edits, which a popup→tab message never did.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.cfg) return;
+    const next = changes.cfg.newValue || {};
+    enabled = next.enabled !== false;
+    verbose = !!next.verbose;
+    if (!enabled) clearChips(); else paint();
   });
 
   document.addEventListener('click', (e) => {

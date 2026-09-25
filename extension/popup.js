@@ -59,15 +59,9 @@ $('enabled').addEventListener('change', async (e) => {
 });
 
 $('verbose').addEventListener('change', async (e) => {
+  // No message to the tab: content.js now watches `cfg` in chrome.storage, which
+  // covers this and every other tab at once — and the `enabled` toggle too.
   await cfgStore.set({ verbose: e.target.checked });
-  // Sent unconditionally, with no URL guard. `tabs.Tab.url` is populated only
-  // when the extension has host permission for that tab's URL, and this extension
-  // deliberately declares none for voz — it relies on `content_scripts.matches`
-  // alone. Whether that alone populates `tab.url` is not something to build a
-  // feature on, and guarding on it would silently skip the re-render. A tab with
-  // no content script simply rejects, which the catch swallows.
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) chrome.tabs.sendMessage(tab.id, { type: 'rerender' }).catch(() => {});
   await render();
 });
 

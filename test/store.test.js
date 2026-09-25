@@ -175,8 +175,12 @@ describe('shouldClassify', () => {
     ...over,
   });
 
-  it('false when disabled', () => {
-    expect(shouldClassify({ member: m(), cfg: normalize({ ...CFG, enabled: false }), now, hash: HASH })).toBe(false);
+  it('false when disabled, and force does not override it', () => {
+    const off = normalize({ ...CFG, enabled: false });
+    expect(shouldClassify({ member: m(), cfg: off, now, hash: HASH })).toBe(false);
+    // The master switch must stop spending: the extension promises to call
+    // nothing when off, and a forced classification is still a paid call.
+    expect(shouldClassify({ member: m(), cfg: off, now, hash: HASH, force: true })).toBe(false);
   });
 
   it('false without an API key', () => {
