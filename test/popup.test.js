@@ -99,3 +99,44 @@ describe('popup warning row', () => {
     expect($('#warn').textContent).toBe('Chưa cấu hình API key — chưa thể phân loại.');
   });
 });
+
+describe('popup status line', () => {
+  // `labelSetHash` is irrelevant here only because the popup never consults it;
+  // the chip precedence it does consult is at/evidenceCount, handled below.
+  const labeled = (at) => ({
+    choice: 'troll', probabilities: null, lean: {}, at, evidenceCount: 12, labelSetHash: 'x',
+  });
+
+  it('counts a labeled member, and the row shows the same label', async () => {
+    await boot({ cfg: { apiKey: 'sk-test' }, members: [member('42', { label: labeled(1000) })] });
+    expect($('#status').textContent).toBe('1 thành viên · 1 đã phân loại');
+    expect($('#members .row').textContent).toContain('Troll');
+  });
+
+  it('does not count a member whose error is newer than its label', async () => {
+    // The divergence that shipped: `members.filter((m) => m.label)` counted this
+    // member as labeled while its row rendered an error chip, so the status line
+    // and the list directly below it contradicted each other.
+    await boot({
+      cfg: { apiKey: 'sk-test' },
+      members: [member('42', {
+        label: labeled(1000),
+        lastError: { code: 429, message: 'slow down', at: 2000 },
+      })],
+    });
+    expect($('#status').textContent).toBe('1 thành viên · 0 đã phân loại');
+    expect($('#members .row').textContent).not.toContain('Troll');
+  });
+
+  it('still counts the label when the error is older than it', async () => {
+    await boot({
+      cfg: { apiKey: 'sk-test' },
+      members: [member('42', {
+        label: labeled(2000),
+        lastError: { code: 429, message: 'slow down', at: 1000 },
+      })],
+    });
+    expect($('#status').textContent).toBe('1 thành viên · 1 đã phân loại');
+    expect($('#members .row').textContent).toContain('Troll');
+  });
+});

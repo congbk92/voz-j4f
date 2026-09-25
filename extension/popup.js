@@ -24,13 +24,19 @@ async function render() {
     ? 'Chưa cấu hình API key — chưa thể phân loại.'
     : rejected ? 'API key sai hoặc hết hạn' : '';
 
-  const labeled = members.filter((m) => m.label).length;
+  // Built once, and counted from the same state the rows render, so the status
+  // line cannot contradict them. `members.filter((m) => m.label)` counted a member
+  // whose `lastError` is newer than its label as labeled while its row rendered an
+  // error chip — `buildChipState` already implements the newer-error-wins
+  // precedence, so the count must read it rather than second-guess it.
+  const rows = members.map((m) => ({ m, chip: buildChipState(m, cfg, Date.now()) }));
+  const labeled = rows.filter(({ chip }) => chip.state === 'labeled').length;
   $('status').textContent =
     `${members.length} thành viên · ${labeled} đã phân loại`;
 
   const box = $('members');
   box.textContent = '';
-  if (!members.length) {
+  if (!rows.length) {
     const empty = document.createElement('div');
     empty.id = 'empty';
     empty.textContent = 'Chưa thu thập dữ liệu.';
@@ -38,8 +44,7 @@ async function render() {
     return;
   }
 
-  for (const m of members) {
-    const chip = buildChipState(m, cfg, Date.now());
+  for (const { m, chip } of rows) {
     const row = document.createElement('div');
     row.className = 'row';
 
