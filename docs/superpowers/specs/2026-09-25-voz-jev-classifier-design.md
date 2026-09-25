@@ -20,7 +20,8 @@ and never make the user wait.
 - Publishing to the Chrome Web Store. The API key lives in extension storage;
   this is personal use only.
 - Supporting any forum other than voz.vn.
-- A backend server, a build step, or a bundler.
+- A backend server or a bundler. There is no compilation step: the source *is*
+  the artifact, and `npm run build` only validates and packages it (§13).
 - Sentiment analysis, moderation, scoring, or any output beyond one archetype
   per member.
 
@@ -69,6 +70,7 @@ test/                vitest + jsdom
 scripts/
   probe.js           DevTools console snippet — dumps real voz DOM structure
   classify-cli.ts    Node CLI: classify a member JSON without the extension
+  build.mjs          validates the manifest, copies to dist/, writes a zip
 ```
 
 ### Boundaries
@@ -211,6 +213,7 @@ what is collected, sent, or cached — the trigger predicate (§8) does not read
   label: {
     choice: 'troll',
     probabilities: { troll: 0.62, … },
+    lean: { proGov: 0.81, proChina: 0.44, … },   // §8, may be partial
     at: 1758787200000,
     evidenceCount: 27,           // totalPosts at classification time
     labelSetHash: 'a1b2c3'
@@ -234,25 +237,49 @@ default. No `unlimitedStorage` permission is needed.
 
 ## 7. Label set
 
-Six defaults, editable on the options page. jev takes `criteria` as an arbitrary
-non-empty map of name → free-text description, so the whole set is data.
+Sixteen defaults — the forum's own slang plus a few general archetypes — editable
+on the options page. jev takes `criteria` as an arbitrary non-empty map of name →
+free-text description, so the whole set is data.
 
-| key | label | color | description |
+| key | label | family | description |
 |---|---|---|---|
-| `thanh` | Thánh | `#16a34a` | Kiến thức sâu, dẫn chứng cụ thể, giải đáp thắc mắc cho người khác |
-| `nghiem_tuc` | Nghiêm túc | `#2563eb` | Thảo luận đàng hoàng, trung lập, có lý lẽ, không công kích cá nhân |
-| `ca_khia` | Cà khịa | `#d97706` | Mỉa mai, chọc ngoáy, nói lái — nhưng vẫn có nội dung và quan điểm |
-| `troll` | Troll | `#dc2626` | Phá thread, gây war, công kích cá nhân, không đóng góp nội dung |
-| `wumao` | Wumao | `#7c3aed` | Nói sáo rỗng, a dua theo số đông, "bài viết hay quá", không có ý kiến riêng |
-| `spam` | Spam/bot | `#64748b` | Quảng cáo, rao bán, lặp lại một nội dung, hoặc vô nghĩa hoàn toàn |
+| `thanh` | Thánh | positive | Kiến thức sâu, dẫn chứng cụ thể, giải đáp thắc mắc cho người khác |
+| `nghiem_tuc` | Nghiêm túc | positive | Thảo luận đàng hoàng, trung lập, có lý lẽ, không công kích cá nhân |
+| `ca_khia` | Cà khịa | neutral | Mỉa mai, chọc ngoáy, nói lái — nhưng vẫn có nội dung và quan điểm |
+| `spam` | Spam/bot | neutral | Quảng cáo, rao bán, lặp lại một nội dung, hoặc vô nghĩa hoàn toàn |
+| `giao_su_mom` | Giáo sư mõm | negative | Thích lên lớp nhưng kiến thức rỗng, nói suông, không dẫn chứng |
+| `thanh_chui` | Thánh chửi | negative | Nổi tiếng vì chửi bới, công kích cá nhân, hạ nhục người khác |
+| `troll` | Troll | negative | Cố tình gây tranh cãi, chọc tức, phá thread, không đóng góp nội dung |
+| `trau` | Trẩu / Trẻ trâu | negative | Người trẻ, nông nổi, phát ngôn thiếu chín chắn |
+| `wumao` | Wumao | negative | Nói sáo rỗng, a dua theo số đông, "bài viết hay quá", không có ý kiến riêng |
+| `bo_do` | Bò đỏ | political | Bảo vệ quan điểm Đảng/Nhà nước VN |
+| `ro_tau` | Rồ tàu | political | Thân Trung Quốc, bênh vực chính sách TQ |
+| `ro_meo` | Rồ mẽo | political | Thân Mỹ, ca ngợi dân chủ phương Tây |
+| `ba_que` | 3 củ / 3que | political | Chống cộng; gốc "cờ vàng ba sọc" |
+| `tu_nhuc` | Tự nhục | political | Tự hạ thấp dân tộc hoặc bản thân người Việt |
+| `sinh_ngoai` | Sính ngoại | political | Ưa chuộng nước ngoài quá mức |
+| `ech_xanh` | Ếch xanh | political | Ngây thơ, thiếu hiểu biết chính trị |
+
+Colors are assigned **per family**, not per label: four hues (positive, neutral,
+negative, political) with light and dark variants. Sixteen distinguishable hues
+do not exist, and chasing them would produce chips nobody can tell apart. The
+label text always carries the meaning; color is for scanning. Each label stores
+its own color in the data, defaulting to its family hue, so the editor can
+override any single label.
+
+The political family deliberately shares one hue even though `bo_do` and `ba_que`
+are opposites. Distinguishing them by color alone would imply the chip is a
+verdict on the view rather than a description of it, and they are only told apart
+by reading the label.
 
 Rules the editor enforces:
 
 - `key` is a stable slug, unique, `[a-z0-9_]+`. It is the value jev returns.
 - At least one label must remain — jev's `choice` criteria must be non-empty.
 - Editing the set changes the question, so labels cached under a different set
-  are not comparable. `labelSetHash` is a hash of the sorted `key:description`
-  pairs; a label whose hash differs from the current one is treated as absent.
+  are not comparable. `labelSetHash` hashes the sorted `key:description` pairs
+  **and** the `lean` question texts (§8), because changing either changes what
+  was asked. A label whose hash differs from the current one is treated as absent.
 
 ## 8. Classification
 
@@ -312,17 +339,45 @@ stored. A post that was nothing but a quote leaves an empty string behind, and
 counting it would inflate `totalPosts` toward the threshold with evidence that
 does not exist.
 
-### Question
+### Questions
+
+Two questions in one call. jev scores a map of questions against one shared
+state, so asking for more costs output tokens, not another request:
 
 ```js
 {
   archetype: {
     type: 'choice',
     instructions: 'Phân loại kiểu thành viên diễn đàn dựa trên các bình luận sau. Chỉ dựa vào nội dung bình luận.',
-    criteria: { thanh: '…', nghiem_tuc: '…', … }   // from cfg.labels
+    criteria: { thanh: '…', bo_do: '…', … }        // from cfg.labels
+  },
+  lean: {
+    proGov:          { type: 'boolean', instructions: 'Có bảo vệ quan điểm Đảng/Nhà nước VN không?' },
+    proChina:        { type: 'boolean', instructions: 'Có thân Trung Quốc, bênh vực chính sách TQ không?' },
+    proUS:           { type: 'boolean', instructions: 'Có thân Mỹ, ca ngợi dân chủ phương Tây không?' },
+    antiGov:         { type: 'boolean', instructions: 'Có chống cộng, thái độ với chế độ hiện tại không?' },
+    selfDeprecating: { type: 'boolean', instructions: 'Có tự hạ thấp dân tộc hoặc người Việt không?' },
+    xenophile:       { type: 'boolean', instructions: 'Có ưa chuộng nước ngoài quá mức không?' },
   }
 }
 ```
+
+**Why the second question exists.** Seven of the sixteen labels describe political
+allegiance, and unlike `troll` vs `thanh` they are not mutually exclusive. Someone
+can be a Bò đỏ *and* a Rồ tàu at once — pro-government and pro-China is a
+coherent, common position. A single 16-way `choice` forces jev to pick one, so
+near-identical evidence would flip between adjacent labels between runs, and the
+chip would look unstable for reasons invisible to the user.
+
+The six booleans are independent, so any combination can be high at once, and
+each returns its own probability. The chip shows `archetype.choice` — one headline
+label — while the tooltip carries the leaning probabilities, which is where the
+overlapping detail actually lives.
+
+The `archetype` instructions describe *style and behaviour* and the `lean`
+questions carry *politics*, so the two are not competing for the same judgement.
+The `lean` texts are code constants, not configuration; `labelSetHash` covers them
+so a change to either invalidates cached labels (§7).
 
 ### Response handling
 
@@ -331,6 +386,11 @@ does not exist.
 unknown choice, the answer is **discarded**, `lastError` is set, and nothing is
 cached — a hallucinated label is worse than no label. Missing `probabilities` is
 tolerated (the chip renders without a percentage).
+
+Each `lean` answer must be `{ type: 'boolean', probability }` in `[0, 1]`. A
+missing or malformed lean answer is dropped **on its own**: the archetype and the
+other five leanings are still cached. One bad boolean should not discard a good
+label, and `lean` is stored as a partial map for exactly this case.
 
 ### Queue
 
@@ -354,7 +414,8 @@ until the trigger conditions are met again or the user forces a re-run.
 Injected next to each post's author on voz pages. Four states:
 
 - **labeled** — `[TROLL 62%]` in the label's color; tooltip shows the full
-  probability distribution, the evidence count, and when it was classified
+  probability distribution, the six leaning probabilities, the evidence count,
+  and when it was classified
 - **collecting** — `[7/10]`, muted; clicking forces an immediate classification
 - **error** — `[!]`, muted; tooltip carries `lastError.message`, clicking retries
 - **nothing** — members with no stored data, and all members when the toggle is off
@@ -488,6 +549,10 @@ the pure modules are unit-tested; DOM injection is verified by hand.
   `20/23` form appearing only past the cap and the collecting row never growing a
   suffix. Plus a `formatDuration` case per unit, and that `verbose` does not
   change the trigger predicate's output.
+- `parseAnswer` with `lean`: a full set, a partial set, a malformed boolean
+  dropped while the archetype survives, and a `lean` absent entirely.
+- `build.test.mjs` — validation fails, naming every bad path, when the manifest
+  references a file that does not exist; passes on the real manifest.
 - One trigger-predicate truth table covering every clause: disabled, missing
   key, below threshold, fresh label, changed `labelSetHash`, `reclassifyEvery`
   reached, `labelTtlMs` expired, recent `lastError`, expired `lastError`, and a
@@ -503,6 +568,11 @@ which matters because prompt tuning is the actual point of the project.
 - The API key sits in `chrome.storage.local`. Extension-scoped storage is not
   readable by web pages, but it is not encrypted, and it travels with the
   profile directory. Personal use only; never publish this with a key.
+- Several labels name political allegiances (`bo_do`, `ba_que`, `ro_tau`), so the
+  output is a per-person political judgement — often a wrong one. That is the
+  point of the toy, but it makes "personal use only" about more than the key: the
+  stored records and any screenshot of them are the sensitive part. Keep it local,
+  and keep the clear-data button (§9) within reach.
 - Text from posts on the page — **including other members' words**, not just the
   logged-in user's — is sent to Vercel's AI Gateway. That is inherent to the
   feature and worth stating plainly rather than discovering later.
@@ -510,13 +580,52 @@ which matters because prompt tuning is the actual point of the project.
   does, so it adds no load to the site and does not touch Cloudflare's bot
   detection.
 
-## 13. Implementation order
+## 13. Build and install
+
+There is no bundler, so the extension source *is* the shipped artifact. The build
+command exists to catch the failure that actually bites unpacked extensions — a
+`manifest.json` naming a file that does not exist — and to produce a clean
+directory to load.
+
+```
+npm run build
+```
+
+`scripts/build.mjs`:
+
+1. Parse and validate `extension/manifest.json`: valid JSON, `manifest_version: 3`,
+   and every path in `content_scripts.js`/`css`, `background.service_worker`, and
+   `web_accessible_resources` exists on disk. Fail loudly, listing **every**
+   missing path at once rather than the first, so one run reports the whole
+   problem.
+2. Confirm the `lib/*.js` modules `content.js` dynamically imports exist.
+3. Copy `extension/` to `dist/`, replacing it wholesale — no tests, no stray
+   files.
+4. Zip `dist/` to `dist/voz-jev-<version>.zip`, version read from the manifest.
+   For backup and moving to another machine; it is not for the Web Store (§2).
+
+Install:
+
+1. `chrome://extensions`
+2. Enable **Developer mode**
+3. **Load unpacked** → select `dist/`
+4. Open the extension's options page and paste the gateway API key
+5. Open a voz thread; the popup toggle turns collection on
+
+After editing any file, click the reload icon on the extension card. There is no
+watch mode, because with no bundler there is nothing to rebuild — but Chrome
+serves the previously loaded files until you reload, so an edit that "did
+nothing" usually means a missed reload.
+
+## 14. Implementation order
 
 1. **Probe** — capture real markup, record selectors and theme mechanism.
-2. Extension skeleton: manifest, `config.js`, popup toggle, options shell.
+2. Extension skeleton: manifest, `config.js`, popup toggle, options shell, and
+   `scripts/build.mjs` (§13) so the extension can be loaded from the first commit.
 3. `lib/voz.js` + tests, against probe-confirmed markup.
-4. `scripts/classify-cli.ts` — prove the jev round trip from Node before any
-   UI exists.
+4. `scripts/classify-cli.ts` — prove the jev round trip from Node, including the
+   `archetype` + `lean` questions, before any UI exists. Prompt and label tuning
+   happens here.
 5. `lib/jev.js` + tests.
 6. `lib/store.js` + tests.
 7. `background.js` — store wiring, trigger predicate, queue, gateway call.
