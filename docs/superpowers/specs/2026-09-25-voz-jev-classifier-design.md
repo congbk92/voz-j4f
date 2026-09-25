@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-25
 **Status:** approved for planning
-**Repo:** `try-jev`
+**Repo:** `voz-j4f`
 
 ## 1. Goal
 
