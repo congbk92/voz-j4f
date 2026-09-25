@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
-  chipText, chipHead, chipTail, formatDuration, chipColors, buildChipState,
+  chipText, chipHead, chipTail, chipLabelText, pickLabels, formatDuration,
+  chipColors, buildChipState, MAX_LABELS,
 } from '../extension/lib/chip.js';
 import { normalize } from '../extension/lib/config.js';
 import { DEFAULT_LABELS } from '../extension/lib/labels.js';
 
-const CFG = normalize({ verbose: false });
-const VERBOSE = normalize({ verbose: true });
+// Pinned, not inherited: the collecting cases assert the rendered `7/10`, and
+// taking 10 from a default that is free to move would make them assert the
+// default rather than the renderer.
+const CFG = normalize({ verbose: false, threshold: 10 });
+const VERBOSE = normalize({ ...CFG, verbose: true });
 const NOW = 1_700_000_000_000;
 const DAY = 86400000;
 
@@ -68,6 +72,138 @@ const collecting = () => ({
 const errored = () => labeled({
   label: null,
   lastError: { code: 401, message: 'API key sai hoặc hết hạn', at: NOW },
+});
+
+describe('pickLabels', () => {
+  const withProbs = (probabilities, choice) => labeled({
+    label: { ...labeled().label, choice, probabilities },
+  });
+  const keysOf = (m, cfg = CFG) => pickLabels(m.label, cfg).map((l) => l.key);
+
+  it('shows only the winner when it has a clear lead', () => {
+    const m = withProbs({ troll: 0.80, thanh: 0.05, ca_khia: 0.04 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll']);
+  });
+
+  it('shows the runner-up when the belief is genuinely split', () => {
+    // The case the feature exists for: 0.38 is not a rival reading of one slot,
+    // it is a large share of the evidence pointing somewhere else.
+    const m = withProbs({ troll: 0.42, bo_do: 0.38, ca_khia: 0.11 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll', 'bo_do']);
+  });
+
+  it('shows only the winner when every score is near noise', () => {
+    // Mass spread thin by a member the model cannot read. The ratio alone keeps
+    // all three — every one is within 40% of the top — so the floor is what stops
+    // three guesses being printed as three findings.
+    const m = withProbs({ troll: 0.09, thanh: 0.08, ca_khia: 0.07 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll']);
+  });
+
+  it('always shows the winner, however small its share', () => {
+    const m = withProbs({ troll: 0.02, thanh: 0.01 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll']);
+  });
+
+  // The distributions actually observed from the gateway, which the ratio is
+  // calibrated against. Every one of these shows a single label — that is the
+  // point of the setting, not a failure of it.
+  it.each([
+    ['a clear winner', { troll: 0.75, thanh_chui: 0.25 }],
+    ['a moderate lead', { tu_nhuc: 0.63, ca_khia: 0.20, sinh_ngoai: 0.09 }],
+    ['a narrow-ish lead', { nghiem_tuc: 0.53, tu_nhuc: 0.17, sinh_ngoai: 0.10 }],
+    ['a confident read', { thanh: 0.93, nghiem_tuc: 0.07 }],
+  ])('shows only the headline for %s, as observed live', (_name, probabilities) => {
+    const choice = Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0][0];
+    expect(keysOf(withProbs(probabilities, choice))).toEqual([choice]);
+  });
+
+  it('hides a runner-up holding half the headline, which a looser bar would show', () => {
+    // The boundary that separates this setting from a permissive one: at ratio
+    // 0.4 this 0.30 would clear the bar and appear. "Also plausible" is not
+    // enough — the two have to be close enough that the headline is in doubt.
+    const m = withProbs({ troll: 0.60, bo_do: 0.30 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll']);
+  });
+
+  it('shows a second label only when the two are near-tied', () => {
+    const m = withProbs({ troll: 0.45, bo_do: 0.40 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll', 'bo_do']);
+  });
+
+  it('ranks strongest first', () => {
+    const m = withProbs({ bo_do: 0.38, troll: 0.42 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll', 'bo_do']);
+  });
+
+  it('falls back to a single label when the response carried no distribution', () => {
+    // `probabilities` is optional, so this is a real gateway response, not a
+    // malformed one — the member still shows what they were classified as.
+    const m = labeled({ label: { ...labeled().label, probabilities: null } });
+    expect(keysOf(m)).toEqual(['troll']);
+    expect(pickLabels(m.label, CFG)[0].probability).toBeNull();
+  });
+
+  it('drops a key the label set no longer contains', () => {
+    const m = withProbs({ troll: 0.60, da_xoa: 0.55 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll']);
+  });
+
+  it('keeps the winner even when the label set no longer contains it', () => {
+    const cfg = normalize({
+      labels: [{ key: 'other', label: 'Other', family: 'neutral', description: 'x' }],
+    });
+    const m = withProbs({ other: 0.70, troll: 0.65 }, 'troll');
+    expect(keysOf(m, cfg)).toEqual(['troll', 'other']);
+  });
+
+  it('handles a two-label set, where a split is the whole story', () => {
+    // The case a uniform-relative floor would break: at n=2 it would demand an
+    // extra score above 1.0 and hide this runner-up entirely.
+    const cfg = normalize({
+      labels: [
+        { key: 'troll', label: 'Troll', family: 'negative', description: 'x' },
+        { key: 'thanh', label: 'Thánh', family: 'positive', description: 'y' },
+      ],
+    });
+    const m = withProbs({ troll: 0.55, thanh: 0.45 }, 'troll');
+    expect(keysOf(m, cfg)).toEqual(['troll', 'thanh']);
+  });
+
+  it('does not assume any particular label count', () => {
+    // Ten labels, five of them past the ratio bar. The cap decides the count, not
+    // the size of the set — the number of labels is the user's to change.
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      key: `l${i}`, label: `L${i}`, family: 'neutral', description: `d${i}`,
+    }));
+    const cfg = normalize({ labels: many });
+    const probabilities = Object.fromEntries(
+      many.map((l, i) => [l.key, i === 0 ? 0.5 : Math.max(0, 0.44 - i * 0.01)]),
+    );
+    const m = withProbs(probabilities, 'l0');
+    const keys = pickLabels(m.label, cfg).map((l) => l.key);
+    expect(keys).toHaveLength(MAX_LABELS);
+    expect(keys).toEqual(['l0', 'l1', 'l2']);
+  });
+
+  it('carries icon, label and family through for each entry', () => {
+    const m = withProbs({ troll: 0.42, bo_do: 0.38 }, 'troll');
+    expect(pickLabels(m.label, CFG)).toEqual([
+      { key: 'troll', label: 'Troll', icon: '👹', family: 'negative', probability: 0.42 },
+      { key: 'bo_do', label: 'Bò đỏ', icon: '🐂', family: 'political', probability: 0.38 },
+    ]);
+  });
+});
+
+describe('chipLabelText', () => {
+  it('joins every label the member carries, for the popup row', () => {
+    const m = labeled({ label: { ...labeled().label, probabilities: { troll: 0.42, bo_do: 0.38 } } });
+    expect(chipLabelText(buildChipState(m, CFG, NOW))).toBe('👹 Troll, 🐂 Bò đỏ');
+  });
+
+  it('is the single label when there is only one', () => {
+    expect(chipLabelText(buildChipState(labeled(), CFG, NOW))).toBe('👹 Troll');
+  });
 });
 
 describe('chipHead', () => {

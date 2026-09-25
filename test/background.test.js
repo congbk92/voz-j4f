@@ -136,7 +136,8 @@ describe('background worker', () => {
   });
 
   it('does not classify a collect that stays below the threshold', async () => {
-    await boot();
+    // The default threshold is 1, so "below" has to be stated rather than assumed.
+    await boot({ cfg: { threshold: 10 } });
     await send({ type: 'collect', members: batch(3) });
     // Nothing to wait for: give the queue a turn, then assert it stayed empty.
     await new Promise((r) => setTimeout(r, 20));

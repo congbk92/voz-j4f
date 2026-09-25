@@ -44,9 +44,28 @@
     const tail = chipTail(chip, { verbose }, now);
     node.querySelector('.jev-chip-head').textContent = chipHead(chip);
     const tailEl = node.querySelector('.jev-chip-tail');
+
+    // Runners-up stack between the headline and the verbose detail. Reconciled in
+    // place rather than rebuilt: `paint()` re-runs on every MutationObserver tick,
+    // and rebuilding would churn the very DOM that observer is watching.
+    const extras = (chip.labels || []).slice(1)
+      .map((l) => (l.icon ? `${l.icon} ${l.label}` : l.label));
+    const stale = [...node.querySelectorAll('.jev-chip-extra')];
+    extras.forEach((text, i) => {
+      let el = stale[i];
+      if (!el) {
+        el = span('jev-chip-extra');
+        node.insertBefore(el, tailEl);
+      }
+      if (el.textContent !== text) el.textContent = text;
+    });
+    for (let i = extras.length; i < stale.length; i++) stale[i].remove();
+
     tailEl.textContent = tail || '';
     tailEl.hidden = !tail;
-    node.classList.toggle('jev-chip--stacked', !!tail);
+    // Squares off for runners-up as well as for verbose numbers — a 999px pill
+    // around two or three lines reads as a lozenge.
+    node.classList.toggle('jev-chip--stacked', !!tail || extras.length > 0);
 
     node.dataset.state = chip.state;
     node.dataset.member = memberId;

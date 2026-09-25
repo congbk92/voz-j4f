@@ -26,6 +26,14 @@
   border-radius: 8px;
 }
 
+/* A further label the member carries. Same foreground as the headline — one chip
+   carries one background — so the icon is what distinguishes them. */
+.jev-chip-extra {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
 .jev-chip-tail {
   font-size: 10px;
   font-weight: 500;

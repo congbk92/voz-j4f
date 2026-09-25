@@ -45,10 +45,18 @@ additional requests** to voz.vn (no Cloudflare exposure, no rate limits, no
 "which pages matter" guesswork), and the sample improves the longer you browse
 rather than being fixed at whatever one thread happened to contain.
 
-The cost, accepted knowingly: a member you meet once never reaches the threshold
-and never gets labeled, and a fresh thread shows progress bars instead of
-verdicts. A `classify now` affordance (clicking the progress chip) forces a
-verdict immediately, which preserves the ability to test jev on demand.
+The trade is set the other way by default: `threshold` is **1**, so a member is
+labeled from their first stored comment rather than after ten, and a member you
+meet once does get a verdict. The cost moved from coverage to evidence — one
+comment is a thin basis for an archetype, and every new member on a thread is a
+call to the gateway. `reclassifyEvery` is **5**, so a label is revisited once
+five further comments have accrued; set against the 10 it replaces, that is
+roughly twice the re-classification rate for anyone you keep running into.
+
+Both are the user's to trade: raise `threshold` for verdicts resting on more
+evidence, raise `reclassifyEvery` to spend less. A `classify now` affordance
+(clicking the progress chip) forces a verdict below any threshold, which
+preserves the ability to test jev on demand.
 
 ## 4. Components
 
@@ -200,8 +208,8 @@ All state lives in `chrome.storage.local` under two kinds of key.
   apiKey: '',                    // empty = collection on, classification paused
   modelId: 'typesafe-ai/jev',
   labels: [ /* see §7 */ ],
-  threshold: 10,                 // distinct posts before first classification
-  reclassifyEvery: 10,           // new posts since last label before re-running
+  threshold: 1,                  // distinct posts before first classification
+  reclassifyEvery: 5,            // new posts since last label before re-running
   maxPostsPerMember: 20,
   maxMembers: 300,
   labelTtlMs: 604800000          // 7d; 0 disables expiry
@@ -310,6 +318,12 @@ label editor like any other column, and it is deliberately **not** part of
 must not mark cached labels incomparable and trigger a paid re-classification.
 Each default label carries a distinct icon, since two labels sharing one would
 defeat the point of having them.
+
+**The count is open-ended.** The editor adds and removes labels freely, so no part
+of the extension may assume how many there are — in either direction. The
+further-label rule (§Further labels) is deliberately written to behave the same at
+a two-label set as at a forty-label one, and the label-set hash (§7) already
+tolerates any count.
 
 Rules the editor enforces:
 
@@ -421,9 +435,23 @@ near-identical evidence would flip between adjacent labels between runs, and the
 chip would look unstable for reasons invisible to the user.
 
 The six booleans are independent, so any combination can be high at once, and
-each returns its own probability. The chip shows `archetype.choice` — one headline
-label — while the tooltip carries the leaning probabilities, which is where the
-overlapping detail actually lives.
+each returns its own probability.
+
+The `archetype` answer carries a second thing the chip now uses: `probabilities`,
+one entry per label. The chip shows more than the winner — any label holding a
+real share of the belief is printed beside the headline (§Further labels), which
+is what surfaces the political overlap directly instead of leaving it in a
+tooltip. The leanings stay separate and still carry *positions*; the archetypes
+carry style and behaviour.
+
+One honest limit: that distribution is a set of **mutually exclusive** readings
+and must sum to 1, so a member who is genuinely both a Bò đỏ and a Rồ tàu has the
+mass *split* between them rather than scoring high on both. Printing the top few
+entries therefore means "the model is torn between these" — which is the truthful
+reading of the numbers — not "the member is all of these". Independent per-label
+scores would need one `boolean` question per label (§8 Questions); the gateway has
+no multilabel primitive, and sixteen extra questions per call was not worth the
+output cost for this.
 
 The `archetype` instructions describe *style and behaviour* and the `lean`
 questions carry *politics*, so the two are not competing for the same judgement.
@@ -465,9 +493,10 @@ until the trigger conditions are met again or the user forces a re-run.
 Injected next to each post's author on voz pages. Four states:
 
 - **labeled** — `[👹 TROLL]` in the label's color; the icon and the label are the
-  whole chip by default, and verbose adds the numbers as a second line beneath
-  it. Tooltip shows the full probability distribution, the six leaning
-  probabilities, the evidence count, and when it was classified
+  whole chip by default, further labels stack beneath it (§Further labels), and
+  verbose adds the numbers as a last line. Tooltip shows the full probability
+  distribution, the six leaning probabilities, the evidence count, and when it
+  was classified
 - **collecting** — `[7/10]`, muted; clicking forces an immediate classification
 - **error** — `[!]`, muted; tooltip carries `lastError.message`, clicking retries
 - **nothing** — members with no stored data, and all members when the toggle is off
@@ -484,6 +513,68 @@ successful run.
 Chips are inserted into a dedicated container so re-rendering on XenForo's
 AJAX navigations does not duplicate them, and a `MutationObserver` handles
 infinite scroll and page transitions.
+
+### Further labels
+
+A member carries more than one archetype more often than not (§8), and the chip
+shows the further ones stacked between the headline and the verbose detail:
+
+```
+┌──────────────────┐
+│ 👹 TROLL         │  headline — always shown
+│ 🐂 Bò đỏ         │  further label — when it earns the place
+│ 62% · 13 cmt · … │  verbose only (§Verbose mode)
+└──────────────────┘
+```
+
+One chip, one background: the chip takes the headline's family color, and each
+further label is told apart by its icon. Two chips per member would double the
+width of every author line for a difference the icon already carries.
+
+**Which labels qualify.** Always the headline. Then, walking the rest strongest
+first, a label is shown if it holds at least **`EXTRA_LABEL_RATIO`** (0.7) of the
+headline's probability **and** at least **`EXTRA_LABEL_FLOOR`** (0.10) outright —
+up to **`MAX_LABELS`** (3) in total. Constants and rule live in `lib/chip.js`.
+
+That ratio is severe on purpose, and it is a measurement rather than a taste. Five
+live classifications put the runner-up at **0.33×, 0.32×, 0.32× and 0.08×** of the
+headline in the four cases that had one at all (the fifth was unanimous): this
+model's second place sits at roughly a third of first, consistently. So 0.7 does
+not mean "the runner-up is also plausible" — it means the headline is genuinely in
+doubt. The cost is accepted knowingly: on every sample gathered, the rule shows a
+single label. It is a knob for a rare signal. Lowering it toward 0.4 admits "also
+plausible" and roughly nothing else, since the observed runner-ups sit near 0.32.
+
+The ratio is measured *against the headline*, not against a fixed number, because
+the two shapes it has to separate pull in opposite directions:
+
+| distribution | shows | why |
+|---|---|---|
+| `0.80, 0.05, 0.04` | headline only | a clear winner has no runners-up worth printing |
+| `0.42, 0.38, 0.11` | headline + one | a real split: the 0.38 is half the evidence |
+| `0.09, 0.08, 0.07` | headline only | the model is saying "unclear" |
+
+Any fixed cutoff gets the first two rows wrong in opposite directions — a value
+high enough to drop the `0.05` also drops the `0.38`.
+
+The **floor** covers the third row, and is the one absolute rule. Because the
+distribution sums to 1, a member the model cannot read produces a flat smear in
+which every label sits within 40% of a headline that is itself near noise; the
+ratio would show all three, presenting "I don't know" as three findings. The
+floor asks a different question — whether a number is large enough to mean
+anything.
+
+It is deliberately **not** a share of `1/n`. A uniform-relative floor looks more
+principled and breaks at small label sets: at `n = 2` it would require a further
+label to score above 1.0, hiding a genuine `0.55/0.45` split — exactly the case
+the feature exists for. The label set is the user's to edit (§7), so nothing here
+may assume a count. The count that matters is the keys actually present in the
+stored `probabilities` map, which is also the count that stays right while a
+label sits cached from before an edit to the set.
+
+`probabilities` is optional in the response. When it is absent, or every entry is
+below the floor, the chip shows the single headline label and nothing changes —
+a record degrades to the old behaviour rather than rendering an empty chip.
 
 ### Dark theme
 
@@ -510,8 +601,8 @@ Three terms, because "cached" is overloaded here:
   goes stale and the next trigger re-classifies it. `labelTtlMs: 0` means never
 
 A chip has a **main line** — the icon and the label — and, when verbose, a
-**detail line** stacked *below* it. The label is what you scan past; the numbers
-are what you stop on. Percentages stay off the main line because a chip is a
+**detail line** stacked *below* it (above any further labels, §Further labels).
+The label is what you scan past; the numbers are what you stop on. Percentages stay off the main line because a chip is a
 verdict on a member, not a readout: the confidence belongs with the evidence
 counts that qualify it, not bolted to the name.
 

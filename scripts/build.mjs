@@ -42,6 +42,18 @@ export function validateManifest(extDir) {
     check(manifest.background.service_worker, 'background.service_worker');
   }
   if (manifest.action?.default_popup) check(manifest.action.default_popup, 'action.default_popup');
+
+  // Chrome resolves icon paths at load time and silently falls back to a default
+  // icon when one is missing, so nothing downstream would report it.
+  for (const [size, rel] of Object.entries(manifest.icons || {})) {
+    check(rel, `icons.${size}`);
+  }
+  const actionIcon = manifest.action?.default_icon;
+  if (typeof actionIcon === 'string') check(actionIcon, 'action.default_icon');
+  else for (const [size, rel] of Object.entries(actionIcon || {})) {
+    check(rel, `action.default_icon.${size}`);
+  }
+
   if (manifest.options_page) check(manifest.options_page, 'options_page');
   if (manifest.options_ui?.page) check(manifest.options_ui.page, 'options_ui.page');
 

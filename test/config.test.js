@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULTS, RETRY_AFTER_MS, normalize, createConfig } from '../extension/lib/config.js';
+import { DEFAULT_LABELS, LEAN_QUESTIONS, labelSetHash } from '../extension/lib/labels.js';
 
 function fakeStorage(initial = {}) {
   let data = { ...initial };
@@ -26,8 +27,8 @@ describe('DEFAULTS', () => {
       verbose: false,
       apiKey: '',
       modelId: 'typesafe-ai/jev',
-      threshold: 10,
-      reclassifyEvery: 10,
+      threshold: 1,
+      reclassifyEvery: 5,
       maxPostsPerMember: 20,
       maxMembers: 300,
       labelTtlMs: 604800000,
@@ -83,6 +84,48 @@ describe('normalize', () => {
 
   it('treats labelTtlMs 0 as a real value, not missing', () => {
     expect(normalize({ labelTtlMs: 0 }).labelTtlMs).toBe(0);
+  });
+});
+
+describe('normalize icon backfill', () => {
+  // What storage holds for anyone who saved config before icons existed.
+  const legacy = DEFAULT_LABELS.map(({ icon, ...rest }) => rest);
+  const iconOf = (cfg, key) => cfg.labels.find((l) => l.key === key).icon;
+
+  it('gives a pre-icon label set the default icon for its key', () => {
+    // Without this, a stored `labels` array shadows DEFAULTS.labels wholesale and
+    // every chip renders iconless forever, with nothing to show the user why.
+    const cfg = normalize({ labels: legacy });
+    expect(iconOf(cfg, 'troll')).toBe('👹');
+    for (const l of cfg.labels) expect(l.icon).toBeTruthy();
+  });
+
+  it('keeps an icon the user picked', () => {
+    const chosen = legacy.map((l) => (l.key === 'troll' ? { ...l, icon: '🦆' } : l));
+    expect(iconOf(normalize({ labels: chosen }), 'troll')).toBe('🦆');
+  });
+
+  it('treats a cleared icon as a choice, not as a legacy record', () => {
+    const cleared = legacy.map((l) => (l.key === 'troll' ? { ...l, icon: '' } : l));
+    expect(iconOf(normalize({ labels: cleared }), 'troll')).toBe('');
+  });
+
+  it('leaves a user-added label alone when no default matches its key', () => {
+    const custom = [...legacy, { key: 'nhan_moi', label: 'Nhãn mới', family: 'neutral', description: 'x' }];
+    expect(iconOf(normalize({ labels: custom }), 'nhan_moi')).toBeUndefined();
+  });
+
+  it('falls back to the defaults when labels is not an array', () => {
+    expect(normalize({ labels: null }).labels).toHaveLength(16);
+    expect(normalize({ labels: 'nonsense' }).labels).toHaveLength(16);
+  });
+
+  it('does not drag icons into the label set hash', () => {
+    // The backfill must stay cosmetic: a label set that differs from the defaults
+    // only by having no icons is still the same question for jev.
+    const cfg = normalize({ labels: legacy });
+    expect(labelSetHash(cfg.labels, LEAN_QUESTIONS))
+      .toBe(labelSetHash(DEFAULT_LABELS, LEAN_QUESTIONS));
   });
 });
 

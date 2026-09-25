@@ -1,12 +1,15 @@
 <p align="center">
-  <img src="docs/avatar.svg" alt="" width="120" height="120">
+  <img src="extension/icons/icon.svg" alt="" width="120" height="120">
 </p>
 
-# voz-j4f
+# VOZ Chụp Mũ
 
 Labels members of [voz.vn](https://voz.vn) with an archetype ("Troll", "Thánh",
-"Wumao", …) using **jev** through the Vercel AI Gateway. Personal use — the name is
-the disclaimer: *voz, just for fun*.
+"Wumao", …) using **jev** through the Vercel AI Gateway. Personal use.
+
+*Chụp mũ* — to slap a hat on someone, i.e. to pin a label on them — is what the
+extension does to every member it meets. The repo keeps its original name,
+`voz-j4f`: *voz, just for fun*.
 
 ## Install
 
@@ -32,6 +35,7 @@ archive, so passing the zip on does not pass on your key.
 ```sh
 npm test          # offline, no key needed
 npm run build     # validate the manifest, copy extension/ → dist/
+npm run icons     # regenerate the icon PNGs after editing extension/icons/icon.svg
 npm run pack      # the above, plus dist/voz-j4f-<version>.zip
 npm run probe     # dump the voz markup the scraper targets
 npm run classify  # classify from the CLI (AI_GATEWAY_API_KEY in .env.local)

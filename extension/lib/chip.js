@@ -24,6 +24,84 @@ export function chipColors(family, dark) {
   return dark ? entry.dark : entry.light;
 }
 
+/**
+ * How much of the headline's share a further label must hold to be worth showing.
+ *
+ * Deliberately severe. Calibrated against five live classifications, the runner-up
+ * landed at 0.33x, 0.32x, 0.32x and 0.08x of the headline in the four that had a
+ * runner-up at all (the fifth was unanimous) — this model's second place sits at
+ * roughly a third of first, consistently. So 0.7 does not mean "the runner-up is
+ * plausible"; it means the distribution is genuinely torn, which is rare and is
+ * the only case where a second label is saying something the headline does not.
+ *
+ * The cost, accepted knowingly: on every sample gathered so far this rule shows
+ * one label. It is a knob for a rare signal, not a common one — lower it toward
+ * 0.4 to let "also plausible" through.
+ */
+export const EXTRA_LABEL_RATIO = 0.7;
+
+/**
+ * And an absolute floor, because the runner-up test alone cannot catch a member
+ * the model simply cannot read: with the mass spread thin, everything sits
+ * within 40% of a top that is itself near noise. Absolute rather than a share of
+ * `1/n` — a uniform-relative floor collapses at small label sets, where `2/n`
+ * would demand an extra score above 1 and hide a genuine `0.55/0.45` split.
+ */
+export const EXTRA_LABEL_FLOOR = 0.10;
+
+/** Chip height budget. Matters more as the label set grows, not a statistic. */
+export const MAX_LABELS = 3;
+
+/**
+ * Every label the member plausibly carries, strongest first.
+ *
+ * The `choice` question returns a probability per label, but it is a distribution
+ * over mutually exclusive readings of one member — so these numbers say how the
+ * model's belief is spread, not independent per-label facts. A second label earns
+ * its place by holding a real share of that belief, judged *against the winner*:
+ * after a confident 0.80 a 0.20 runner-up is noise, while in a 0.42/0.38 split it
+ * is the whole story, and no fixed cutoff separates those two cases correctly.
+ *
+ * Sorted and filtered over the keys actually present in the stored map, so the
+ * rule never assumes how many labels exist — the set is user-editable, and the
+ * stored map is what describes the numbers being read.
+ */
+export function pickLabels(label, cfg) {
+  const defs = new Map((cfg.labels || []).map((l) => [l.key, l]));
+  const entry = (key, probability) => {
+    const d = defs.get(key);
+    // No definition means the user deleted this label after the record was
+    // classified. It still renders, by its raw key, exactly as it did before.
+    return {
+      key,
+      label: d ? d.label : key,
+      icon: d ? d.icon || '' : '',
+      family: d ? d.family : 'neutral',
+      probability: typeof probability === 'number' ? probability : null,
+    };
+  };
+
+  const probs = label.probabilities;
+  const ranked = probs && typeof probs === 'object'
+    ? Object.entries(probs)
+        .filter(([k, p]) => typeof p === 'number' && p > 0 && defs.has(k))
+        .sort((a, b) => b[1] - a[1])
+    : [];
+
+  const kept = ranked
+    .filter(([, p], i) => i === 0 || (p >= ranked[0][1] * EXTRA_LABEL_RATIO && p >= EXTRA_LABEL_FLOOR))
+    .slice(0, MAX_LABELS)
+    .map(([k, p]) => entry(k, p));
+
+  // `probabilities` is optional in the response, and a deleted label is filtered
+  // out above. Either way the member still shows what they were classified as,
+  // rather than rendering an empty chip.
+  if (kept.length && kept[0].key === label.choice) return kept;
+  const own = probs && typeof probs === 'object' ? probs[label.choice] : undefined;
+  return [entry(label.choice, own), ...kept.filter((l) => l.key !== label.choice)]
+    .slice(0, MAX_LABELS);
+}
+
 /** Turn a member record into the display state the chip renders. */
 export function buildChipState(member, cfg, now) {
   const cached = member.posts.length;
@@ -36,17 +114,19 @@ export function buildChipState(member, cfg, now) {
     && (!member.label || member.lastError.at > member.label.at);
 
   if (member.label && !failedSinceLabel) {
-    const label = (cfg.labels || []).find((l) => l.key === member.label.choice) || null;
-    const prob = member.label.probabilities
-      ? member.label.probabilities[member.label.choice]
-      : undefined;
+    // The headline is `labels[0]` rather than a separate lookup of `choice`, so
+    // the chip and the list it draws its runners-up from can never disagree.
+    // `pickLabels` always resolves at least one, falling back to the raw key.
+    const labels = pickLabels(member.label, cfg);
+    const primary = labels[0];
     return {
       state: 'labeled',
-      key: member.label.choice,
-      icon: label ? label.icon || '' : '',
-      label: label ? label.label : member.label.choice,
-      family: label ? label.family : 'neutral',
-      probability: typeof prob === 'number' ? prob : null,
+      key: primary.key,
+      icon: primary.icon,
+      label: primary.label,
+      family: primary.family,
+      probability: primary.probability,
+      labels,
       lean: member.label.lean || {},
       cached,
       seen: member.totalPosts,
@@ -95,4 +175,15 @@ export function chipTail(chip, cfg, now = Date.now()) {
 export function chipText(chip, cfg, now = Date.now()) {
   const tail = chipTail(chip, cfg, now);
   return tail ? `${chipHead(chip)} · ${tail}` : chipHead(chip);
+}
+
+/**
+ * Every label the member carries, on one line. The popup row has the width to
+ * print them inline, where the chip on the page stacks them.
+ */
+export function chipLabelText(chip) {
+  const list = chip.labels && chip.labels.length
+    ? chip.labels
+    : [{ icon: chip.icon, label: chip.label }];
+  return list.map((l) => (l.icon ? `${l.icon} ${l.label}` : l.label)).join(', ');
 }
