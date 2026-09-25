@@ -42,7 +42,17 @@ describe('chipColors', () => {
     expect(chipColors('negative', true)).toEqual({ bg: '#7f1d1d', fg: '#fecaca' });
   });
   it('falls back to neutral for an unknown family', () => {
-    expect(chipColors('nonsense', false)).toEqual(chipColors('neutral', false));
+    // Literals, not chipColors('neutral', …): comparing the function against
+    // itself passes even if it returns undefined for both arguments.
+    expect(chipColors('nonsense', false)).toEqual({ bg: '#e2e8f0', fg: '#334155' });
+    expect(chipColors('nonsense', true)).toEqual({ bg: '#334155', fg: '#e2e8f0' });
+  });
+
+  it('falls back for inherited Object keys, which are truthy but carry no variants', () => {
+    // `FAMILY_COLORS[family] || FAMILY_COLORS.neutral` returns Object itself for
+    // these, so the fallback never fires and callers reading .bg would throw.
+    expect(chipColors('constructor', false)).toEqual(chipColors('neutral', false));
+    expect(chipColors('toString', true)).toEqual(chipColors('neutral', true));
   });
 });
 
@@ -115,5 +125,23 @@ describe('buildChipState', () => {
   it('defaults lean to an empty object when the label predates lean', () => {
     const m = labeled({ label: { ...labeled().label, lean: undefined } });
     expect(buildChipState(m, CFG, NOW).lean).toEqual({});
+  });
+
+  it('lets a newer error win over the stale label it failed to refresh', () => {
+    const m = labeled({
+      label: { ...labeled().label, at: NOW - 8 * DAY },
+      lastError: { code: 401, message: 'API key sai hoặc hết hạn', at: NOW },
+    });
+    const s = buildChipState(m, CFG, NOW);
+    expect(s.state).toBe('error');
+    expect(s.message).toBe('API key sai hoặc hết hạn');
+  });
+
+  it('keeps the label when the last error predates it', () => {
+    const m = labeled({
+      label: { ...labeled().label, at: NOW },
+      lastError: { code: 429, message: 'slow down', at: NOW - 2 * DAY },
+    });
+    expect(buildChipState(m, CFG, NOW).state).toBe('labeled');
   });
 });

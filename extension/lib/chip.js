@@ -17,8 +17,9 @@ export function formatDuration(ms) {
 }
 
 export function chipColors(family, dark) {
-  // hasOwn, not a truthiness test: an inherited key like 'constructor' is truthy
-  // but carries no light/dark, which would return undefined instead of a colour.
+  // hasOwn, not `||`: inherited keys such as 'constructor' and '__proto__' are
+  // truthy but carry no .light/.dark, so the fallback would not fire and callers
+  // reading .bg would throw.
   const entry = Object.hasOwn(FAMILY_COLORS, family) ? FAMILY_COLORS[family] : FAMILY_COLORS.neutral;
   return dark ? entry.dark : entry.light;
 }
@@ -27,7 +28,14 @@ export function chipColors(family, dark) {
 export function buildChipState(member, cfg, now) {
   const cached = member.posts.length;
 
-  if (member.label) {
+  // A label and an error coexist when a re-classification fails: setError keeps
+  // the last good label. An error newer than the label must win, or the stale
+  // label masks the failure and the error state is unreachable for anyone who
+  // has ever been labeled — the member most likely to hit a failed refresh.
+  const failedSinceLabel = member.lastError
+    && (!member.label || member.lastError.at > member.label.at);
+
+  if (member.label && !failedSinceLabel) {
     const label = (cfg.labels || []).find((l) => l.key === member.label.choice) || null;
     const prob = member.label.probabilities
       ? member.label.probabilities[member.label.choice]
