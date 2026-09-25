@@ -101,8 +101,13 @@ Content script → background:
 | `clear` | `{}` | `{ ok: true }` |
 | `rerender` | `{}` | `{ ok: true }` |
 
-`rerender` is sent by the popup to the active tab after a display-only setting
-changes, so chips re-render without a page reload.
+`rerender` is **no longer sent by anything.** Config staleness in an open tab is
+handled instead by a `chrome.storage.onChanged` listener in the content script,
+which reacts to writes from the popup *and* the options page, and to changes the
+popup→tab message could never reach — a threshold or label-set edit made in
+options. The message type and both handlers are retained but unreachable; the
+next change to this area should delete them together rather than leave the
+protocol describing a path nothing walks.
 
 Background → content, unsolicited, after a classification completes:
 
@@ -204,7 +209,12 @@ All state lives in `chrome.storage.local` under two kinds of key.
 ```
 
 `enabled` gates both collection and classification: when it is off, the extension
-reads nothing from the page and calls nothing. Already-stored data is untouched
+reads nothing from the page and calls nothing. This bounds the **browsing
+pipeline** — collection, classification, and the click-to-force affordance. It does
+not gate the options page's "test connection" button, which is an explicit,
+labelled diagnostic the user invokes by name to verify a key; gating it on the
+master switch would make it untestable exactly when someone is configuring it.
+Already-stored data is untouched
 and stays visible in the popup's verbose list (§9).
 
 `verbose` is display-only. It changes what chips and the popup render, and never
@@ -514,7 +524,8 @@ show `chưa phân loại` in place of label and expiry. This list renders from s
 data regardless of `enabled`, so switching the extension off does not hide what
 it already knows.
 
-Toggling verbose messages the active tab with `rerender` (§4) so chips update
+Toggling verbose writes config, which the content script observes via
+`chrome.storage.onChanged` (§4) so chips update
 without a page reload.
 
 ### Popup
