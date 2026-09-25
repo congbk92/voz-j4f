@@ -482,7 +482,13 @@ describe('validateManifest', () => {
   });
 
   it('reports every missing file at once, not just the first', () => {
-    const dir = scaffold({ 'background.js': '' }, BASE);
+    // content.js must be present for the dynamic-import branch to be reachable:
+    // it is the only branch that can name a concrete lib module (lib/voz.js).
+    // Without it, the lib/*.js glob branch reports the glob, not the module.
+    const dir = scaffold({
+      'background.js': '',
+      'content.js': "import(chrome.runtime.getURL('lib/voz.js'));",
+    }, BASE);
     try {
       const errors = validateManifest(dir);
       expect(errors).toHaveLength(3);
@@ -533,7 +539,7 @@ Create `scripts/build.mjs`:
 
 ```js
 #!/usr/bin/env node
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
