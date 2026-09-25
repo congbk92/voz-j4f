@@ -4,7 +4,7 @@ export const RETRY_AFTER_MS = 3600000;
 
 export const DEFAULTS = {
   enabled: true,
-  verbose: false,
+  verbose: false,   // show confidence, cache counts and expiry under each chip
   apiKey: '',
   modelId: 'typesafe-ai/jev',
   labels: DEFAULT_LABELS,

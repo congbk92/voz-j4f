@@ -5,23 +5,28 @@ export const FAMILY_COLORS = {
   political: { light: { bg: '#ede9fe', fg: '#5b21b6' }, dark: { bg: '#4c1d95', fg: '#ddd6fe' } },
 };
 
+/**
+ * `icon` is display-only: it shows on the chip and in the popup list, and is
+ * deliberately absent from `labelSetHash` below. Changing it changes nothing
+ * about what jev is asked, so it must not invalidate cached labels.
+ */
 export const DEFAULT_LABELS = [
-  { key: 'thanh',       label: 'Thánh',           family: 'positive',  description: 'Kiến thức sâu, dẫn chứng cụ thể, giải đáp thắc mắc cho người khác' },
-  { key: 'nghiem_tuc',  label: 'Nghiêm túc',      family: 'positive',  description: 'Thảo luận đàng hoàng, trung lập, có lý lẽ, không công kích cá nhân' },
-  { key: 'ca_khia',     label: 'Cà khịa',         family: 'neutral',   description: 'Mỉa mai, chọc ngoáy, nói lái — nhưng vẫn có nội dung và quan điểm' },
-  { key: 'spam',        label: 'Spam/bot',        family: 'neutral',   description: 'Quảng cáo, rao bán, lặp lại một nội dung, hoặc vô nghĩa hoàn toàn' },
-  { key: 'giao_su_mom', label: 'Giáo sư mõm',     family: 'negative',  description: 'Thích lên lớp nhưng kiến thức rỗng, nói suông, không dẫn chứng' },
-  { key: 'thanh_chui',  label: 'Thánh chửi',      family: 'negative',  description: 'Nổi tiếng vì chửi bới, công kích cá nhân, hạ nhục người khác' },
-  { key: 'troll',       label: 'Troll',           family: 'negative',  description: 'Cố tình gây tranh cãi, chọc tức, phá thread, không đóng góp nội dung' },
-  { key: 'trau',        label: 'Trẩu / Trẻ trâu', family: 'negative',  description: 'Người trẻ, nông nổi, phát ngôn thiếu chín chắn' },
-  { key: 'wumao',       label: 'Wumao',           family: 'negative',  description: 'Nói sáo rỗng, a dua theo số đông, "bài viết hay quá", không có ý kiến riêng' },
-  { key: 'bo_do',       label: 'Bò đỏ',           family: 'political', description: 'Bảo vệ quan điểm Đảng/Nhà nước VN' },
-  { key: 'ro_tau',      label: 'Rồ tàu',          family: 'political', description: 'Thân Trung Quốc, bênh vực chính sách TQ' },
-  { key: 'ro_meo',      label: 'Rồ mẽo',          family: 'political', description: 'Thân Mỹ, ca ngợi dân chủ phương Tây' },
-  { key: 'ba_que',      label: '3 củ / 3que',     family: 'political', description: 'Chống cộng; gốc "cờ vàng ba sọc"' },
-  { key: 'tu_nhuc',     label: 'Tự nhục',         family: 'political', description: 'Tự hạ thấp dân tộc hoặc bản thân người Việt' },
-  { key: 'sinh_ngoai',  label: 'Sính ngoại',      family: 'political', description: 'Ưa chuộng nước ngoài quá mức' },
-  { key: 'ech_xanh',    label: 'Ếch xanh',        family: 'political', description: 'Ngây thơ, thiếu hiểu biết chính trị' },
+  { key: 'thanh',       icon: '🧠', label: 'Thánh',           family: 'positive',  description: 'Kiến thức sâu, dẫn chứng cụ thể, giải đáp thắc mắc cho người khác' },
+  { key: 'nghiem_tuc',  icon: '🧐', label: 'Nghiêm túc',      family: 'positive',  description: 'Thảo luận đàng hoàng, trung lập, có lý lẽ, không công kích cá nhân' },
+  { key: 'ca_khia',     icon: '🌶️', label: 'Cà khịa',         family: 'neutral',   description: 'Mỉa mai, chọc ngoáy, nói lái — nhưng vẫn có nội dung và quan điểm' },
+  { key: 'spam',        icon: '🤖', label: 'Spam/bot',        family: 'neutral',   description: 'Quảng cáo, rao bán, lặp lại một nội dung, hoặc vô nghĩa hoàn toàn' },
+  { key: 'giao_su_mom', icon: '🎓', label: 'Giáo sư mõm',     family: 'negative',  description: 'Thích lên lớp nhưng kiến thức rỗng, nói suông, không dẫn chứng' },
+  { key: 'thanh_chui',  icon: '🤬', label: 'Thánh chửi',      family: 'negative',  description: 'Nổi tiếng vì chửi bới, công kích cá nhân, hạ nhục người khác' },
+  { key: 'troll',       icon: '👹', label: 'Troll',           family: 'negative',  description: 'Cố tình gây tranh cãi, chọc tức, phá thread, không đóng góp nội dung' },
+  { key: 'trau',        icon: '🐃', label: 'Trẩu / Trẻ trâu', family: 'negative',  description: 'Người trẻ, nông nổi, phát ngôn thiếu chín chắn' },
+  { key: 'wumao',       icon: '💰', label: 'Wumao',           family: 'negative',  description: 'Nói sáo rỗng, a dua theo số đông, "bài viết hay quá", không có ý kiến riêng' },
+  { key: 'bo_do',       icon: '🐂', label: 'Bò đỏ',           family: 'political', description: 'Bảo vệ quan điểm Đảng/Nhà nước VN' },
+  { key: 'ro_tau',      icon: '🐉', label: 'Rồ tàu',          family: 'political', description: 'Thân Trung Quốc, bênh vực chính sách TQ' },
+  { key: 'ro_meo',      icon: '🦅', label: 'Rồ mẽo',          family: 'political', description: 'Thân Mỹ, ca ngợi dân chủ phương Tây' },
+  { key: 'ba_que',      icon: '💛', label: '3 củ / 3que',     family: 'political', description: 'Chống cộng; gốc "cờ vàng ba sọc"' },
+  { key: 'tu_nhuc',     icon: '🙇', label: 'Tự nhục',         family: 'political', description: 'Tự hạ thấp dân tộc hoặc bản thân người Việt' },
+  { key: 'sinh_ngoai',  icon: '✈️', label: 'Sính ngoại',      family: 'political', description: 'Ưa chuộng nước ngoài quá mức' },
+  { key: 'ech_xanh',    icon: '🐸', label: 'Ếch xanh',        family: 'political', description: 'Ngây thơ, thiếu hiểu biết chính trị' },
 ];
 
 export const ARCHETYPE_INSTRUCTIONS =
@@ -37,7 +42,10 @@ export const LEAN_QUESTIONS = {
   xenophile:       'Có ưa chuộng nước ngoài quá mức không?',
 };
 
-/** Hash of everything that changes what jev is asked. */
+/**
+ * Hash of everything that changes what jev is asked. `icon` is not among it —
+ * an icon edit is cosmetic and must not mark every cached label incomparable.
+ */
 export function labelSetHash(labels, leanQuestions) {
   const criteria = [...labels]
     .map((l) => `${l.key}:${l.description}`)

@@ -1,6 +1,6 @@
 import { createConfig } from './lib/config.js';
 import { createStore } from './lib/store.js';
-import { buildChipState, chipText } from './lib/chip.js';
+import { buildChipState, chipHead, chipTail } from './lib/chip.js';
 
 const $ = (id) => document.getElementById(id);
 const cfgStore = createConfig(chrome.storage.local);
@@ -12,6 +12,11 @@ async function render() {
 
   $('enabled').checked = cfg.enabled;
   $('verbose').checked = cfg.verbose;
+
+  // With the master toggle off the page shows no chips at all, so the detail
+  // toggle has nothing to act on. Disable it instead of leaving it settable.
+  $('verbose').disabled = !cfg.enabled;
+  $('verboseRow').classList.toggle('off', !cfg.enabled);
 
   // §9 promises a warning row when the key is missing *or rejected*, and §8's
   // table gives 401/403 that exact string. Without this the only signal a bad or
@@ -54,15 +59,18 @@ async function render() {
     left.appendChild(name);
     if (chip.state === 'labeled') {
       const tag = document.createElement('span');
-      tag.textContent = ` · ${chipText(chip, cfg)}`;
+      tag.textContent = ` · ${chipHead(chip)}`;
       left.appendChild(tag);
     }
 
+    // Identity on the left, numbers on the right. Verbose *replaces* the bare
+    // count rather than appending to it, so a row never prints "13 cmt" twice.
     const meta = document.createElement('span');
     meta.className = 'meta';
-    meta.textContent = chip.state === 'collecting'
+    const detail = chipTail(chip, cfg);
+    meta.textContent = detail || (chip.state === 'collecting'
       ? `chưa phân loại · ${chip.count}/${chip.threshold}`
-      : `${chip.cached} cmt`;
+      : `${chip.cached} cmt`);
 
     row.append(left, meta);
     box.appendChild(row);

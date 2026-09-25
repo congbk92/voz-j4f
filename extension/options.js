@@ -27,6 +27,16 @@ function renderLabels() {
   labels.forEach((l, i) => {
     const tr = document.createElement('tr');
 
+    const icon = document.createElement('td');
+    icon.className = 'icon';
+    const iconInput = document.createElement('input');
+    iconInput.type = 'text';
+    iconInput.value = l.icon || '';
+    iconInput.maxLength = 8;
+    iconInput.title = 'Biểu tượng hiện trên nhãn (emoji hoặc ký tự)';
+    iconInput.addEventListener('input', () => { labels[i].icon = iconInput.value.trim(); });
+    icon.appendChild(iconInput);
+
     const key = document.createElement('td');
     const keyInput = document.createElement('input');
     keyInput.type = 'text';
@@ -72,7 +82,7 @@ function renderLabels() {
     });
     del.appendChild(delBtn);
 
-    tr.append(key, name, desc, fam, del);
+    tr.append(icon, key, name, desc, fam, del);
     table.appendChild(tr);
   });
 }
@@ -91,7 +101,7 @@ async function load() {
 }
 
 $('addLabel').addEventListener('click', () => {
-  labels.push({ key: 'nhan_moi', label: 'Nhãn mới', family: 'neutral', description: '' });
+  labels.push({ key: 'nhan_moi', icon: '🏷️', label: 'Nhãn mới', family: 'neutral', description: '' });
   renderLabels();
 });
 

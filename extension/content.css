@@ -4,7 +4,9 @@
 }
 
 .jev-chip {
-  display: inline-block;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
   margin-left: 6px;
   padding: 1px 7px;
   border-radius: var(--jev-chip-radius);
@@ -15,6 +17,22 @@
   cursor: pointer;
   user-select: none;
 }
+
+/* Verbose: the numbers sit under the label, so the chip grows downward and
+   squares off — a 999px radius around two lines reads as a lozenge. */
+.jev-chip--stacked {
+  align-items: flex-start;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+.jev-chip-tail {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.jev-chip-tail[hidden] { display: none; }
 
 .jev-chip--muted {
   opacity: 0.75;

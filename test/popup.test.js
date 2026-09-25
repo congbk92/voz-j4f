@@ -145,3 +145,53 @@ describe('popup status line', () => {
     expect($('#members .row').textContent).toContain('Troll');
   });
 });
+
+describe('popup detail toggle', () => {
+  it('disables and greys the detail toggle while the extension is off', async () => {
+    // With the master toggle off the page renders no chips at all, so the detail
+    // toggle has nothing to act on and must not look settable.
+    await boot({ cfg: { enabled: false, verbose: true } });
+    expect($('#verbose').disabled).toBe(true);
+    expect($('#verboseRow').classList.contains('off')).toBe(true);
+  });
+
+  it('leaves it usable while the extension is on', async () => {
+    await boot({ cfg: { enabled: true } });
+    expect($('#verbose').disabled).toBe(false);
+    expect($('#verboseRow').classList.contains('off')).toBe(false);
+  });
+});
+
+describe('popup member rows', () => {
+  const tagged = {
+    choice: 'troll', probabilities: { troll: 0.62 }, lean: {},
+    at: Date.now(), evidenceCount: 12, labelSetHash: 'x',
+  };
+
+  it('shows the icon and label by default, with no percentage', async () => {
+    await boot({ cfg: { apiKey: 'sk-test' }, members: [member('42', { label: tagged })] });
+    const row = $('#members .row');
+    expect(row.querySelector('span').textContent).toContain('👹 Troll');
+    expect(row.textContent).not.toContain('62%');
+  });
+
+  it('moves the detail into the meta column when verbose, without repeating the count', async () => {
+    await boot({
+      cfg: { apiKey: 'sk-test', verbose: true },
+      members: [member('42', { label: tagged })],
+    });
+    const row = $('#members .row');
+    expect(row.querySelector('span').textContent).toContain('👹 Troll');
+    expect(row.querySelector('.meta').textContent).toMatch(/^62% · 12 cmt · còn 6d$/);
+  });
+
+  it('still lists stored members while the extension is off', async () => {
+    // Spec §9: the list renders from stored data regardless of `enabled`, so
+    // switching off does not hide what the extension already knows.
+    await boot({
+      cfg: { enabled: false, apiKey: 'sk-test' },
+      members: [member('42', { label: tagged })],
+    });
+    expect($('#members .row')).not.toBeNull();
+  });
+});

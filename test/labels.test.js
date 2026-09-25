@@ -24,6 +24,18 @@ describe('DEFAULT_LABELS', () => {
     }
   });
 
+  it('gives every label an icon, which is what makes a chip scannable', () => {
+    for (const l of DEFAULT_LABELS) {
+      expect(typeof l.icon).toBe('string');
+      expect(l.icon.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('does not repeat an icon across families, which would defeat the point', () => {
+    const icons = DEFAULT_LABELS.map((l) => l.icon);
+    expect(new Set(icons).size).toBe(icons.length);
+  });
+
   it('includes the merged forum-slang labels', () => {
     const keys = DEFAULT_LABELS.map((l) => l.key);
     for (const k of ['bo_do', 'ro_tau', 'ro_meo', 'ba_que', 'giao_su_mom',
@@ -53,6 +65,14 @@ describe('labelSetHash', () => {
       l.key === 'troll' ? { ...l, description: 'something else' } : l);
     expect(labelSetHash(changed, LEAN_QUESTIONS))
       .not.toBe(labelSetHash(DEFAULT_LABELS, LEAN_QUESTIONS));
+  });
+
+  it('ignores icons, which change nothing about what jev is asked', () => {
+    // Otherwise recolouring a label on the options page would mark every cached
+    // label incomparable and trigger a full, paid re-classification.
+    const reiconed = DEFAULT_LABELS.map((l) => ({ ...l, icon: '🦆' }));
+    expect(labelSetHash(reiconed, LEAN_QUESTIONS))
+      .toBe(labelSetHash(DEFAULT_LABELS, LEAN_QUESTIONS));
   });
 
   it('changes when a lean question changes', () => {
