@@ -69,6 +69,19 @@ describe('validateManifest', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  it("checks the service worker's static imports too", () => {
+    const dir = scaffold({
+      'content.js': '',
+      'content.css': '',
+      'background.js': "import { createConfig } from './lib/config.js';\nimport './lib/missing.js';",
+    }, BASE);
+    try {
+      const errors = validateManifest(dir).join('\n');
+      expect(errors).toContain('lib/config.js');
+      expect(errors).toContain('lib/missing.js');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it('rejects invalid JSON', () => {
     const dir = mkdtempSync(join(tmpdir(), 'jev-build-'));
     writeFileSync(join(dir, 'manifest.json'), '{ not json');

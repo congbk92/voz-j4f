@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
@@ -63,6 +63,19 @@ export function validateManifest(extDir) {
     const src = readFileSync(contentPath, 'utf8');
     const re = /import\(\s*chrome\.runtime\.getURL\(\s*['"]([^'"]+)['"]\s*\)\s*\)/g;
     for (const m of src.matchAll(re)) check(m[1], 'content.js dynamic import');
+  }
+
+  // The service worker is an ES module, so its static imports must resolve too.
+  // A bad one throws at worker startup with an error visible only in the
+  // service-worker console — the least discoverable failure this validator exists
+  // to pre-empt. Only relative specifiers are checked; bare ones are built-ins.
+  const workerRel = manifest.background?.service_worker;
+  if (workerRel && existsSync(join(extDir, workerRel))) {
+    const src = readFileSync(join(extDir, workerRel), 'utf8');
+    const re = /^import\s+(?:[^'"]*?from\s+)?['"](\.[^'"]+)['"]/gm;
+    for (const m of src.matchAll(re)) {
+      check(normalize(join(dirname(workerRel), m[1])), `${workerRel} static import`);
+    }
   }
 
   return problems;
