@@ -403,7 +403,13 @@ const CFG_KEY = 'cfg';
 export function normalize(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
 
-  const cap = Math.max(1, Number(cfg.maxPostsPerMember) || DEFAULTS.maxPostsPerMember);
+  // Number.isFinite, NOT `||`. `Number(0) || DEFAULT` short-circuits on the falsy
+  // zero and silently yields the DEFAULT — so a `0` would become 300 instead of the
+  // 1 these tests assert, and `Infinity` would pass through and reach
+  // `posts.slice(0, Infinity)`. `isFinite` separates "explicitly 0" from "absent or
+  // garbage", which is the distinction every floor below depends on.
+  const n = Number(cfg.maxPostsPerMember);
+  const cap = Math.max(1, Number.isFinite(n) ? n : DEFAULTS.maxPostsPerMember);
   cfg.maxPostsPerMember = cap;
 
   // Every count below floors at 1. A zero is not a smaller setting, it is a broken
@@ -415,9 +421,13 @@ export function normalize(raw) {
   //                        every member above the threshold: unbounded gateway spend.
   // Clamped here because `normalize` is the single funnel every config read and
   // write passes through, so it binds every writer, not just the options page.
-  cfg.maxMembers = Math.max(1, Number(cfg.maxMembers) || DEFAULTS.maxMembers);
-  cfg.reclassifyEvery = Math.max(1, Number(cfg.reclassifyEvery) || DEFAULTS.reclassifyEvery);
+  const nMembers = Number(cfg.maxMembers);
+  cfg.maxMembers = Math.max(1, Number.isFinite(nMembers) ? nMembers : DEFAULTS.maxMembers);
+  const nReclassify = Number(cfg.reclassifyEvery);
+  cfg.reclassifyEvery = Math.max(1, Number.isFinite(nReclassify) ? nReclassify : DEFAULTS.reclassifyEvery);
 
+  // `threshold` keeps its `|| 1`: 0 and -5 both landing on 1 is already monotonic,
+  // and an existing test pins it.
   cfg.threshold = Math.min(cap, Math.max(1, Number(cfg.threshold) || 1));
   return cfg;
 }
