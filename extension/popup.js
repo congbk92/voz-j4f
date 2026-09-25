@@ -8,11 +8,22 @@ const store = createStore(chrome.storage.local);
 
 async function render() {
   const cfg = await cfgStore.get();
+  const members = await store.listMembers();
+
   $('enabled').checked = cfg.enabled;
   $('verbose').checked = cfg.verbose;
-  $('warn').textContent = cfg.apiKey ? '' : 'Chưa cấu hình API key — chưa thể phân loại.';
 
-  const members = await store.listMembers();
+  // §9 promises a warning row when the key is missing *or rejected*, and §8's
+  // table gives 401/403 that exact string. Without this the only signal a bad or
+  // expired key produced was a `!` chip behind a tooltip on the page. `lastError`
+  // is already on every member record, so it rides the list we render below.
+  const rejected = members.some(
+    (m) => m.lastError && (m.lastError.code === 401 || m.lastError.code === 403),
+  );
+  $('warn').textContent = !cfg.apiKey
+    ? 'Chưa cấu hình API key — chưa thể phân loại.'
+    : rejected ? 'API key sai hoặc hết hạn' : '';
+
   const labeled = members.filter((m) => m.label).length;
   $('status').textContent =
     `${members.length} thành viên · ${labeled} đã phân loại`;
