@@ -518,6 +518,19 @@ describe('validateManifest', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  it("checks the service worker's static imports too", () => {
+    const dir = scaffold({
+      'content.js': '',
+      'content.css': '',
+      'background.js': "import { createConfig } from './lib/config.js';\nimport './lib/missing.js';",
+    }, BASE);
+    try {
+      const errors = validateManifest(dir).join('\n');
+      expect(errors).toContain('lib/config.js');
+      expect(errors).toContain('lib/missing.js');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it('rejects invalid JSON', () => {
     const dir = mkdtempSync(join(tmpdir(), 'jev-build-'));
     writeFileSync(join(dir, 'manifest.json'), '{ not json');
@@ -540,7 +553,7 @@ Create `scripts/build.mjs`:
 ```js
 #!/usr/bin/env node
 import { cpSync, existsSync, readFileSync, rmSync, mkdirSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
@@ -605,6 +618,19 @@ export function validateManifest(extDir) {
     for (const m of src.matchAll(re)) check(m[1], 'content.js dynamic import');
   }
 
+  // The service worker is an ES module, so its static imports must resolve too.
+  // A bad one throws at worker startup with an error visible only in the
+  // service-worker console — the least discoverable failure this validator exists
+  // to pre-empt. Only relative specifiers are checked; bare ones are built-ins.
+  const workerRel = manifest.background?.service_worker;
+  if (workerRel && existsSync(join(extDir, workerRel))) {
+    const src = readFileSync(join(extDir, workerRel), 'utf8');
+    const re = /^import\s+(?:[^'"]*?from\s+)?['"](\.[^'"]+)['"]/gm;
+    for (const m of src.matchAll(re)) {
+      check(normalize(join(dirname(workerRel), m[1])), `${workerRel} static import`);
+    }
+  }
+
   return problems;
 }
 
@@ -640,7 +666,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
 - [ ] **Step 4: Run the build test to verify it passes**
 
 Run: `npx vitest run test/build.test.js`
-Expected: PASS, 5 tests
+Expected: PASS, 6 tests
 
 - [ ] **Step 5: Write the manifest**
 
@@ -2609,6 +2635,14 @@ const store = createStore(storage);
 const queue = [];
 const inFlight = new Set();
 
+// Ids whose queued run must ignore threshold, freshness, and the error cooldown
+// (spec §8). The flag has to survive into `runOne`: running the predicate there
+// without it would drop the very request that queued the member — a `force` from
+// a collecting chip is below threshold, one from an error chip is inside
+// RETRY_AFTER_MS, and one from a labeled chip is still fresh. All three are
+// admitted by the handler's force check and rejected by a plain re-check.
+const forced = new Set();
+
 // memberId -> Set<tabId> that asked about it. We push results only to those
 // tabs, which is why the extension needs no `tabs` permission (spec §5).
 const watchers = new Map();
@@ -2631,8 +2665,13 @@ async function collectChips(ids) {
   return labels;
 }
 
-function enqueue(memberId) {
-  if (inFlight.has(memberId) || queue.includes(memberId)) return;
+function enqueue(memberId, force = false) {
+  // Already in flight: that run is classifying this member right now, so there
+  // is nothing left to force. Bailing here (rather than recording the flag) also
+  // keeps `forced` from outliving its queue entry.
+  if (inFlight.has(memberId)) return;
+  if (force) forced.add(memberId);
+  if (queue.includes(memberId)) return;   // upgraded in place by the flag above
   queue.push(memberId);
   pump();
 }
@@ -2640,19 +2679,22 @@ function enqueue(memberId) {
 function pump() {
   while (inFlight.size < CONCURRENCY && queue.length) {
     const id = queue.shift();
+    const force = forced.delete(id);   // consumed here, so it cannot leak
     inFlight.add(id);
-    runOne(id).catch((e) => console.error('[jev] classify failed', id, e))
+    runOne(id, force).catch((e) => console.error('[jev] classify failed', id, e))
       .finally(() => { inFlight.delete(id); pump(); });
   }
 }
 
-async function runOne(memberId) {
+async function runOne(memberId, force = false) {
   const cfg = await cfgStore.get();
   const member = await store.getMember(memberId);
   if (!member) return;
 
+  // Re-checked with the same predicate that queued it: a duplicate enqueue is
+  // dropped, but a forced one is not undone by the re-check.
   const hash = labelSetHash(cfg.labels, LEAN_QUESTIONS);
-  if (!shouldClassify({ member, cfg, now: Date.now(), hash })) return;
+  if (!shouldClassify({ member, cfg, now: Date.now(), hash, force })) return;
 
   const state = buildState(member);
   const questions = buildQuestions(cfg.labels, LEAN_QUESTIONS, ARCHETYPE_INSTRUCTIONS);
@@ -2726,7 +2768,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return;
         }
         watch(msg.memberId, sender.tab && sender.tab.id);
-        enqueue(msg.memberId);
+        enqueue(msg.memberId, true);
         sendResponse({ ok: true });
         return;
       }
@@ -2752,10 +2794,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 ```
 
-- [ ] **Step 2: Run the build to confirm the manifest still validates**
+- [ ] **Step 2: Run the build to confirm the manifest and worker imports validate**
 
 Run: `npm run build`
-Expected: `✓ dist/ built...` — the validator confirms every `lib/` module `background.js` needs exists.
+Expected: `✓ dist/ built...` — the validator now also scans `background.js`'s static
+imports, so it confirms every `lib/` module the worker needs exists.
+
+This does **not** replace Step 4. The build proves the files are present and the
+paths resolve; only a real browser proves the worker starts.
 
 - [ ] **Step 3: Run the full suite**
 
