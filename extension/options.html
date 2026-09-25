@@ -1,9 +1,62 @@
 <!doctype html>
 <html lang="vi">
-<head><meta charset="utf-8"><title>VOZ jev — Cài đặt</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>VOZ jev — Cài đặt</title>
+  <style>
+    body { max-width: 720px; margin: 24px auto; padding: 0 16px;
+           font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    fieldset { margin-bottom: 20px; border: 1px solid #d1d5db; border-radius: 6px; }
+    legend { font-weight: 600; padding: 0 6px; }
+    label { display: block; margin: 8px 0 2px; }
+    input[type=text], input[type=password], input[type=number] { width: 100%; padding: 6px; box-sizing: border-box; }
+    input[type=number] { width: 120px; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 4px 6px; vertical-align: top; border-bottom: 1px solid #eee; }
+    td.desc input { width: 100%; }
+    .hint { color: #6b7280; font-size: 12px; }
+    .ok { color: #166534; }
+    .bad { color: #991b1b; }
+  </style>
+</head>
 <body>
-  <h1>Cài đặt</h1>
-  <p>Sẽ được hoàn thiện ở Task 11.</p>
+  <h1>VOZ jev — Cài đặt</h1>
+
+  <fieldset>
+    <legend>API</legend>
+    <label for="apiKey">Vercel AI Gateway API key</label>
+    <input type="password" id="apiKey" placeholder="sk-...">
+    <label for="modelId">Model ID</label>
+    <input type="text" id="modelId">
+    <p class="hint">Key chỉ lưu trong máy này. Không bao giờ chia sẻ extension kèm key.</p>
+    <button id="test">Kiểm tra kết nối</button>
+    <span id="testResult"></span>
+  </fieldset>
+
+  <fieldset>
+    <legend>Ngưỡng</legend>
+    <label for="threshold">Số bình luận tối thiểu để phân loại</label>
+    <input type="number" id="threshold" min="1">
+    <label for="reclassifyEvery">Phân loại lại sau mỗi N bình luận mới</label>
+    <input type="number" id="reclassifyEvery" min="1">
+    <label for="ttlDays">Nhãn hết hạn sau (ngày, 0 = không hết hạn)</label>
+    <input type="number" id="ttlDays" min="0">
+    <label for="maxPostsPerMember">Số bình luận lưu mỗi thành viên</label>
+    <input type="number" id="maxPostsPerMember" min="1">
+    <label for="maxMembers">Số thành viên lưu tối đa</label>
+    <input type="number" id="maxMembers" min="1">
+  </fieldset>
+
+  <fieldset>
+    <legend>Nhãn</legend>
+    <p class="hint">Sửa mô tả sẽ làm nhãn cũ trở nên không so sánh được và chúng sẽ được phân loại lại.</p>
+    <table id="labels"></table>
+    <button id="addLabel">Thêm nhãn</button>
+  </fieldset>
+
+  <button id="save">Lưu</button>
+  <span id="saveResult"></span>
+
   <script type="module" src="options.js"></script>
 </body>
 </html>
