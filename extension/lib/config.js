@@ -17,8 +17,26 @@ export const DEFAULTS = {
 
 const CFG_KEY = 'cfg';
 
+/**
+ * Labels stored before icons existed carry no `icon` key, and a stored `labels`
+ * array replaces `DEFAULTS.labels` wholesale — so those installs would render
+ * every chip with no icon and never notice, because the defaults they should
+ * have come from are shadowed by their own saved copy. Backfill by `key`.
+ *
+ * Only a *missing* icon is filled. An explicit empty string is left alone: that
+ * is a user who cleared the field, not a record from before the field existed.
+ */
+function backfillIcons(labels) {
+  if (!Array.isArray(labels)) return DEFAULTS.labels;
+  const byKey = new Map(DEFAULT_LABELS.map((l) => [l.key, l.icon]));
+  return labels.map((l) => (
+    l && l.icon === undefined && byKey.has(l.key) ? { ...l, icon: byKey.get(l.key) } : l
+  ));
+}
+
 export function normalize(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
+  cfg.labels = backfillIcons(cfg.labels);
   const n = Number(cfg.maxPostsPerMember);
   const cap = Math.max(1, Number.isFinite(n) ? n : DEFAULTS.maxPostsPerMember);
   cfg.maxPostsPerMember = cap;

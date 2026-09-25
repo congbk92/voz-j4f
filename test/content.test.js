@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildChipState } from '../extension/lib/chip.js';
 import { normalize } from '../extension/lib/config.js';
+import { DEFAULT_LABELS } from '../extension/lib/labels.js';
 
 const EXT = join(dirname(fileURLToPath(import.meta.url)), '..', 'extension');
 
@@ -108,6 +109,14 @@ beforeEach(() => {
 describe('chip rendering', () => {
   it('leads with the label icon and its name', async () => {
     expect(await boot({ members: { 821098: labeledMember() } })).toBe(true);
+    expect(chip().querySelector('.jev-chip-head').textContent).toBe('👹 Troll');
+  });
+
+  it('still finds an icon when the stored label set predates icons', async () => {
+    // The whole chain: a legacy config reaches normalize, gets backfilled, and
+    // the chip renders an icon — not an iconless chip nobody can explain.
+    const legacy = DEFAULT_LABELS.map(({ icon, ...rest }) => rest);
+    await boot({ cfg: { labels: legacy }, members: { 821098: labeledMember() } });
     expect(chip().querySelector('.jev-chip-head').textContent).toBe('👹 Troll');
   });
 
