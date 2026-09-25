@@ -105,6 +105,32 @@ describe('pickLabels', () => {
     expect(keysOf(m)).toEqual(['troll']);
   });
 
+  // The distributions actually observed from the gateway, which the ratio is
+  // calibrated against. Every one of these shows a single label — that is the
+  // point of the setting, not a failure of it.
+  it.each([
+    ['a clear winner', { troll: 0.75, thanh_chui: 0.25 }],
+    ['a moderate lead', { tu_nhuc: 0.63, ca_khia: 0.20, sinh_ngoai: 0.09 }],
+    ['a narrow-ish lead', { nghiem_tuc: 0.53, tu_nhuc: 0.17, sinh_ngoai: 0.10 }],
+    ['a confident read', { thanh: 0.93, nghiem_tuc: 0.07 }],
+  ])('shows only the headline for %s, as observed live', (_name, probabilities) => {
+    const choice = Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0][0];
+    expect(keysOf(withProbs(probabilities, choice))).toEqual([choice]);
+  });
+
+  it('hides a runner-up holding half the headline, which a looser bar would show', () => {
+    // The boundary that separates this setting from a permissive one: at ratio
+    // 0.4 this 0.30 would clear the bar and appear. "Also plausible" is not
+    // enough — the two have to be close enough that the headline is in doubt.
+    const m = withProbs({ troll: 0.60, bo_do: 0.30 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll']);
+  });
+
+  it('shows a second label only when the two are near-tied', () => {
+    const m = withProbs({ troll: 0.45, bo_do: 0.40 }, 'troll');
+    expect(keysOf(m)).toEqual(['troll', 'bo_do']);
+  });
+
   it('ranks strongest first', () => {
     const m = withProbs({ bo_do: 0.38, troll: 0.42 }, 'troll');
     expect(keysOf(m)).toEqual(['troll', 'bo_do']);

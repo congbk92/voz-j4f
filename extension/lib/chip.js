@@ -25,13 +25,20 @@ export function chipColors(family, dark) {
 }
 
 /**
- * How much of the winner's share a further label must hold to be worth showing.
+ * How much of the headline's share a further label must hold to be worth showing.
  *
- * Calibrated against a real gateway response, where a four-post member came back
- * `0.48, 0.20, 0.09, 0.09, 0.08, …` — a typical shape. At 0.5 the bar would sit
- * at 0.24 and hide that 0.20 outright, so the feature would almost never fire.
+ * Deliberately severe. Calibrated against five live classifications, the runner-up
+ * landed at 0.33x, 0.32x, 0.32x and 0.08x of the headline in the four that had a
+ * runner-up at all (the fifth was unanimous) — this model's second place sits at
+ * roughly a third of first, consistently. So 0.7 does not mean "the runner-up is
+ * plausible"; it means the distribution is genuinely torn, which is rare and is
+ * the only case where a second label is saying something the headline does not.
+ *
+ * The cost, accepted knowingly: on every sample gathered so far this rule shows
+ * one label. It is a knob for a rare signal, not a common one — lower it toward
+ * 0.4 to let "also plausible" through.
  */
-export const EXTRA_LABEL_RATIO = 0.4;
+export const EXTRA_LABEL_RATIO = 0.7;
 
 /**
  * And an absolute floor, because the runner-up test alone cannot catch a member

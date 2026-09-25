@@ -532,9 +532,18 @@ further label is told apart by its icon. Two chips per member would double the
 width of every author line for a difference the icon already carries.
 
 **Which labels qualify.** Always the headline. Then, walking the rest strongest
-first, a label is shown if it holds at least **`EXTRA_LABEL_RATIO`** (0.4) of the
+first, a label is shown if it holds at least **`EXTRA_LABEL_RATIO`** (0.7) of the
 headline's probability **and** at least **`EXTRA_LABEL_FLOOR`** (0.10) outright —
 up to **`MAX_LABELS`** (3) in total. Constants and rule live in `lib/chip.js`.
+
+That ratio is severe on purpose, and it is a measurement rather than a taste. Five
+live classifications put the runner-up at **0.33×, 0.32×, 0.32× and 0.08×** of the
+headline in the four cases that had one at all (the fifth was unanimous): this
+model's second place sits at roughly a third of first, consistently. So 0.7 does
+not mean "the runner-up is also plausible" — it means the headline is genuinely in
+doubt. The cost is accepted knowingly: on every sample gathered, the rule shows a
+single label. It is a knob for a rare signal. Lowering it toward 0.4 admits "also
+plausible" and roughly nothing else, since the observed runner-ups sit near 0.32.
 
 The ratio is measured *against the headline*, not against a fixed number, because
 the two shapes it has to separate pull in opposite directions:
