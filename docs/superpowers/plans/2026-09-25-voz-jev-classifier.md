@@ -1411,12 +1411,13 @@ describe('buildState', () => {
                    'e'.repeat(1200), 'f'.repeat(800), 'g'.repeat(700)];
     const state = buildState(member(posts));
     expect(state.posts).toHaveLength(MAX_POSTS);
-    // c (3000), e (1200), b (900), f (800), g (700), d (50) — by original length.
+    // Identity is the only way to observe rank-before-truncate: c, e, b and f all
+    // cap at 800, so truncate-then-rank would yield b,c,e,f,g,d instead.
+    expect(state.posts.map((p) => p[0])).toEqual(['c', 'e', 'b', 'f', 'g', 'd']);
     expect(state.posts[0]).toHaveLength(MAX_POST_CHARS);
-    expect(state.posts[1]).toHaveLength(1200);
-    expect(state.posts[2]).toHaveLength(900);
+    expect(state.posts[1]).toHaveLength(MAX_POST_CHARS);  // 1200-char post, truncated
+    expect(state.posts[4]).toHaveLength(700);             // under the cap, survives whole
     expect(state.posts[5]).toHaveLength(50);
-    expect(state.posts).not.toContain('a'.repeat(10));
   });
 
   it('truncates each post at 800 characters', () => {
