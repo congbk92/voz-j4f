@@ -208,6 +208,7 @@ what is collected, sent, or cached — the trigger predicate (§8) does not read
   name: 'username',
   totalPosts: 37,                // distinct posts ever seen; monotonic, uncapped
   posts: [ { postId, text, ts } ],  // newest-first, capped at maxPostsPerMember
+  seenIds: ['1234567', …],       // recent ids, newest-first, capped at 3×maxPostsPerMember
   profile: { joined: '2019', postCount: 4213 },  // last observed, may be partial
   threads: ['thread title', …],  // up to 5 distinct, newest-first
   label: {
@@ -228,12 +229,22 @@ member has 20 stored posts, `posts.length` stops growing and could never signal
 that re-classification is due. `totalPosts` keeps counting distinct posts after
 the cap is reached.
 
+`seenIds` exists for the same reason, applied to dedupe. Deduping against
+`posts` alone would be enough only while a member is under the cap: past it, the
+posts the cap evicted are no longer in `posts`, so re-sending a page would treat
+them as new — `totalPosts` would inflate, the freshly re-added old posts would
+displace the newest ones in the window, and §4's idempotence claim would be
+false for exactly the members that have been seen most. The ring is capped at
+three times the post cap, which comfortably exceeds the largest batch one page
+can produce.
+
 Eviction: when a *new* member key is created and the member count exceeds
 `maxMembers`, drop the least-recently-seen members by `lastSeenAt` until at the
 cap. The check runs only on member creation, not on every write.
 
-Worst-case size: `300 × 20 × ~700B ≈ 4MB`, within `chrome.storage.local`'s 10MB
-default. No `unlimitedStorage` permission is needed.
+Worst-case size: `300 × (20 × ~700B + 60 × ~9B) ≈ 4.4MB`, within
+`chrome.storage.local`'s 10MB default. No `unlimitedStorage` permission is
+needed.
 
 ## 7. Label set
 

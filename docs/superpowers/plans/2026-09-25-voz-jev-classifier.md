@@ -1901,6 +1901,38 @@ describe('upsertPosts', () => {
     expect(m.threads).not.toContain('T1');
   });
 
+  it('stores a multi-post batch newest-first when the batch arrives oldest-first', async () => {
+    // Document order from extractPosts is oldest-first; the window must come out
+    // newest-first, or the cap silently discards the most recent posts.
+    await store.upsertPosts([
+      post('1', '42', 'bình luận đủ dài số một'),
+      post('2', '42', 'bình luận đủ dài số hai'),
+      post('3', '42', 'bình luận đủ dài số ba'),
+    ]);
+    expect((await store.getMember('42')).posts.map((p) => p.postId)).toEqual(['3', '2', '1']);
+  });
+
+  it('stays idempotent past the cap, so an identical resend changes nothing', async () => {
+    const cfg = { maxPostsPerMember: 20 };
+    const batch = Array.from({ length: 25 }, (_, i) =>
+      post(String(i + 1), '42', `bình luận đủ dài số ${i + 1}`));
+    await store.upsertPosts(batch, cfg);
+    const first = await store.getMember('42');
+    await store.upsertPosts(batch, cfg);
+    const second = await store.getMember('42');
+    expect(second.totalPosts).toBe(25);
+    expect(second.posts.map((p) => p.postId)).toEqual(first.posts.map((p) => p.postId));
+  });
+
+  it('records every distinct thread in a mixed batch, newest first', async () => {
+    await store.upsertPosts([
+      post('1', '42', 'bình luận đủ dài số một', { thread: 'T1' }),
+      post('2', '42', 'bình luận đủ dài số hai', { thread: 'T2' }),
+      post('3', '42', 'bình luận đủ dài số ba', { thread: 'T3' }),
+    ]);
+    expect((await store.getMember('42')).threads).toEqual(['T3', 'T2', 'T1']);
+  });
+
   it('does not duplicate an already-known thread title', async () => {
     await store.upsertPosts([post('1', '42', 'bình luận đủ dài thứ nhất', { thread: 'T' })]);
     await store.upsertPosts([post('2', '42', 'bình luận đủ dài thứ hai', { thread: 'T' })]);
@@ -2065,7 +2097,7 @@ const MAX_THREADS = 5;
 
 const key = (id) => `${MEMBER_PREFIX}${id}`;
 const emptyMember = (id, name) => ({
-  id, name, totalPosts: 0, posts: [], threads: [], profile: {},
+  id, name, totalPosts: 0, posts: [], seenIds: [], threads: [], profile: {},
   label: null, lastError: null, lastSeenAt: 0,
 });
 
@@ -2131,28 +2163,44 @@ export function createStore(storage, now = () => Date.now()) {
         const batch = posts.filter((p) => p.memberId === id);
         const prev = existing[id];
         if (!prev) created.push(id);
-        const m = prev ? { ...prev, posts: [...prev.posts], threads: [...prev.threads], profile: { ...prev.profile } }
-                       : emptyMember(id, batch[0].name);
+        const m = prev
+          ? {
+              ...prev,
+              posts: [...prev.posts],
+              seenIds: [...(prev.seenIds || [])],
+              threads: [...prev.threads],
+              profile: { ...prev.profile },
+            }
+          : emptyMember(id, batch[batch.length - 1].name);
 
-        const known = new Set(m.posts.map((p) => p.postId));
-        let added = 0;
+        // `known` spans the stored window AND the ring of recently seen ids, so a
+        // post the cap has evicted is not treated as new when its page is re-sent.
+        // Without the ring, dedupe only holds below the cap and §4's idempotence
+        // claim is false for the members seen most.
+        const known = new Set(m.seenIds);
+        for (const p of m.posts) known.add(p.postId);
+
+        const addedIds = [];
+        // `batch` arrives in document order — oldest first — so unshifting each
+        // post in turn leaves `posts` newest-first. Callers must preserve that.
         for (const p of batch) {
           if (known.has(p.postId)) continue;
           known.add(p.postId);
+          addedIds.push(p.postId);
           m.posts.unshift({ postId: p.postId, text: p.text, ts: t });
           m.totalPosts += 1;
-          added += 1;
         }
 
-        if (added > 0) {
+        if (addedIds.length) {
           m.posts = m.posts.slice(0, cfg.maxPostsPerMember);
-          const thread = batch[0].thread;
-          if (thread) {
-            m.threads = [thread, ...m.threads.filter((x) => x !== thread)].slice(0, MAX_THREADS);
-          }
+          m.seenIds = [...new Set([...addedIds, ...m.seenIds])]
+            .slice(0, cfg.maxPostsPerMember * 3);
+          // Reversed: the batch is oldest-first, so its last thread is the newest.
+          const batchThreads = [...new Set(batch.map((p) => p.thread).filter(Boolean))].reverse();
+          m.threads = [...new Set([...batchThreads, ...m.threads])].slice(0, MAX_THREADS);
         }
 
-        const latest = batch[0];
+        const latest = batch[batch.length - 1];
         if (latest.name) m.name = latest.name;
         if (latest.joined) m.profile.joined = latest.joined;
         if (latest.postCount != null) m.profile.postCount = latest.postCount;
@@ -2206,7 +2254,7 @@ export function createStore(storage, now = () => Date.now()) {
 - [ ] **Step 4: Run the store test**
 
 Run: `npx vitest run test/store.test.js`
-Expected: PASS, 26 tests
+Expected: PASS, 29 tests
 
 - [ ] **Step 5: Run the whole suite**
 
