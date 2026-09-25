@@ -82,6 +82,21 @@ describe('validateManifest', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  it('reports an indented static import, which the column-0 scan let ship', () => {
+    // `^import` with the `m` flag matches only column 0, so this exact file —
+    // indented, and so indented in real code whenever it sits inside a block or a
+    // wrapped import list — validated green and then threw at worker startup.
+    const dir = scaffold({
+      'content.js': '',
+      'content.css': '',
+      'background.js': "const x = 1;\nif (x) {\n  import './lib/indented-gone.js';\n}\n",
+    }, BASE);
+    try {
+      const errors = validateManifest(dir).join('\n');
+      expect(errors).toContain('lib/indented-gone.js');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it('rejects invalid JSON', () => {
     const dir = mkdtempSync(join(tmpdir(), 'jev-build-'));
     writeFileSync(join(dir, 'manifest.json'), '{ not json');

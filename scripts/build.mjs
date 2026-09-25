@@ -69,10 +69,12 @@ export function validateManifest(extDir) {
   // A bad one throws at worker startup with an error visible only in the
   // service-worker console — the least discoverable failure this validator exists
   // to pre-empt. Only relative specifiers are checked; bare ones are built-ins.
+  // `^\s*` rather than `^`: an indented import is still an import, and anchoring
+  // at column 0 let one ship green.
   const workerRel = manifest.background?.service_worker;
   if (workerRel && existsSync(join(extDir, workerRel))) {
     const src = readFileSync(join(extDir, workerRel), 'utf8');
-    const re = /^import\s+(?:[^'"]*?from\s+)?['"](\.[^'"]+)['"]/gm;
+    const re = /^\s*import\s+(?:[^'"]*?from\s+)?['"](\.[^'"]+)['"]/gm;
     for (const m of src.matchAll(re)) {
       check(normalize(join(dirname(workerRel), m[1])), `${workerRel} static import`);
     }
