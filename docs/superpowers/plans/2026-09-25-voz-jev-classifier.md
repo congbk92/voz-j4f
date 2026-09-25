@@ -3240,7 +3240,7 @@ Replace `extension/options.html`:
 Replace `extension/options.js`:
 
 ```js
-import { createConfig } from './lib/config.js';
+import { createConfig, DEFAULTS } from './lib/config.js';
 import {
   FAMILY_COLORS, DEFAULT_LABELS, LEAN_QUESTIONS, ARCHETYPE_INSTRUCTIONS,
 } from './lib/labels.js';
@@ -3249,6 +3249,19 @@ import { buildState, buildQuestions, callJev, parseAnswer } from './lib/jev.js';
 const $ = (id) => document.getElementById(id);
 const cfgStore = createConfig(chrome.storage.local);
 let labels = [];
+
+/**
+ * Read a numeric field, falling back to the default when the field is empty or
+ * non-numeric. `Number('')` is 0, and `normalize` clamps 0 up to 1 — so a cleared
+ * field would silently set the threshold to a single post and make the extension
+ * classify on almost no evidence.
+ */
+const num = (id, fallback) => {
+  const raw = $(id).value.trim();
+  if (raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+};
 
 function renderLabels() {
   const table = $('labels');
@@ -3336,11 +3349,11 @@ $('save').addEventListener('click', async () => {
   await cfgStore.set({
     apiKey: $('apiKey').value.trim(),
     modelId: $('modelId').value.trim() || 'typesafe-ai/jev',
-    threshold: Number($('threshold').value),
-    reclassifyEvery: Number($('reclassifyEvery').value),
-    labelTtlMs: Math.max(0, Number($('ttlDays').value)) * 86400000,
-    maxPostsPerMember: Number($('maxPostsPerMember').value),
-    maxMembers: Number($('maxMembers').value),
+    threshold: num('threshold', DEFAULTS.threshold),
+    reclassifyEvery: num('reclassifyEvery', DEFAULTS.reclassifyEvery),
+    labelTtlMs: Math.max(0, num('ttlDays', DEFAULTS.labelTtlMs / 86400000)) * 86400000,
+    maxPostsPerMember: num('maxPostsPerMember', DEFAULTS.maxPostsPerMember),
+    maxMembers: num('maxMembers', DEFAULTS.maxMembers),
     labels: labels.map((l) => ({ ...l })),
   });
   $('saveResult').textContent = '✓ Đã lưu';
