@@ -328,8 +328,14 @@ stored label; only the latest label per member is kept.
 it, because `posts` is capped and a threshold above the cap could never be met.
 
 A **forced** classification (the user clicking a chip) ignores `threshold`,
-`reclassifyEvery`, `labelTtlMs`, and `lastError`, but still requires a non-empty
-API key and at least one stored post.
+`reclassifyEvery`, `labelTtlMs`, and `lastError`. It does **not** bypass `enabled`,
+`apiKey`, or the requirement for at least one stored post.
+
+`enabled` is checked *before* the force short-circuit, because §7 promises that with
+the toggle off the extension "reads nothing from the page and calls nothing" — and a
+forced classification spends against the gateway exactly like any other. A master
+switch that does not stop spending is not a master switch. The list above is
+deliberately exhaustive: anything not named in it is still enforced.
 
 ### State
 

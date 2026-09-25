@@ -2173,8 +2173,12 @@ describe('shouldClassify', () => {
     ...over,
   });
 
-  it('false when disabled', () => {
-    expect(shouldClassify({ member: m(), cfg: normalize({ ...CFG, enabled: false }), now, hash: HASH })).toBe(false);
+  it('false when disabled, and force does not override it', () => {
+    const off = normalize({ ...CFG, enabled: false });
+    expect(shouldClassify({ member: m(), cfg: off, now, hash: HASH })).toBe(false);
+    // The master switch must stop spending: §7 promises the extension calls
+    // nothing when off, and a forced classification is still a paid call.
+    expect(shouldClassify({ member: m(), cfg: off, now, hash: HASH, force: true })).toBe(false);
   });
 
   it('false without an API key', () => {
@@ -2285,9 +2289,12 @@ const emptyMember = (id, name) => ({
 export function shouldClassify({ member, cfg, now, hash, force = false }) {
   if (!member || !cfg.apiKey) return false;
   if (!member.posts || member.posts.length === 0) return false;
-  if (force) return true;
-
+  // `enabled` gates force too, so it is checked BEFORE the force short-circuit.
+  // Spec §7 promises that with the toggle off the extension calls nothing, and a
+  // forced classification spends against the gateway like any other. Anything the
+  // force flag bypasses is named below, deliberately and exhaustively.
   if (!cfg.enabled) return false;
+  if (force) return true;
   if (member.posts.length < cfg.threshold) return false;
 
   const l = member.label;
