@@ -64,6 +64,7 @@ const labeledMember = (over = {}) => ({
 });
 
 let onChanged = null;
+let onMessage = null;
 
 /**
  * content.js is an IIFE that imports its helpers through `chrome.runtime.getURL`,
@@ -79,11 +80,14 @@ async function boot({ cfg = {}, members = {} } = {}) {
   }
 
   onChanged = null;
+  onMessage = null;
   globalThis.chrome = {
     runtime: {
       getURL: (p) => pathToFileURL(join(EXT, p)).href,
       sendMessage: vi.fn(async () => ({ labels: chips })),
-      onMessage: { addListener: vi.fn() },
+      // Captured, not stubbed away: a repaint from the background worker is how a
+      // chip's label list changes after the first render.
+      onMessage: { addListener: (cb) => { onMessage = cb; } },
     },
     storage: {
       local: fakeStorage({ cfg }),
@@ -146,6 +150,63 @@ describe('chip rendering', () => {
     await boot({ members: {} });
     await new Promise((r) => setTimeout(r, 50));
     expect(document.querySelectorAll('.jev-chip')).toHaveLength(0);
+  });
+});
+
+describe('further labels', () => {
+  // A split distribution: troll 0.42 clears the bar, ca_khia 0.11 falls under it.
+  const split = () => labeledMember({
+    label: {
+      ...labeledMember().label,
+      probabilities: { troll: 0.42, bo_do: 0.38, ca_khia: 0.11 },
+    },
+  });
+  const extras = () => [...document.querySelectorAll('.jev-chip-extra')];
+
+  it('stacks the further labels under the headline', async () => {
+    await boot({ members: { 821098: split() } });
+    expect(document.querySelectorAll('.jev-chip')).toHaveLength(1);
+    expect(extras().map((e) => e.textContent)).toEqual(['🐂 Bò đỏ']);
+    expect(chip().querySelector('.jev-chip-head').textContent).toBe('👹 Troll');
+  });
+
+  it('lays them out between the headline and the verbose detail', async () => {
+    await boot({ cfg: { verbose: true }, members: { 821098: split() } });
+    expect([...chip().children].map((el) => el.className))
+      .toEqual(['jev-chip-head', 'jev-chip-extra', 'jev-chip-tail']);
+  });
+
+  it('squares the chip off for extras, with verbose off', async () => {
+    // The pill radius is for one line; a two-line chip reads as a lozenge.
+    await boot({ members: { 821098: split() } });
+    expect(chip().classList.contains('jev-chip--stacked')).toBe(true);
+    expect(chip().querySelector('.jev-chip-tail').hidden).toBe(true);
+  });
+
+  it('keeps the extras when verbose adds its detail line', async () => {
+    await boot({ cfg: { verbose: true }, members: { 821098: split() } });
+    expect(extras()).toHaveLength(1);
+    expect(chip().querySelector('.jev-chip-tail').hidden).toBe(false);
+  });
+
+  it('shows no extras for a member with one clear label', async () => {
+    await boot({ members: { 821098: labeledMember() } });
+    expect(extras()).toHaveLength(0);
+    expect(chip().classList.contains('jev-chip--stacked')).toBe(false);
+  });
+
+  it('removes extras a later repaint no longer calls for', async () => {
+    // The reconciliation path: a re-classification can narrow the list, and the
+    // stale lines have to go with it.
+    await boot({ members: { 821098: split() } });
+    expect(extras()).toHaveLength(1);
+
+    const narrowed = buildChipState(labeledMember(), normalize({}), Date.now());
+    onMessage({ type: 'labels', labels: { 821098: narrowed } });
+
+    expect(extras()).toHaveLength(0);
+    expect(chip().querySelector('.jev-chip-head').textContent).toBe('👹 Troll');
+    expect(chip().classList.contains('jev-chip--stacked')).toBe(false);
   });
 });
 

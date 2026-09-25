@@ -1,6 +1,6 @@
 import { createConfig } from './lib/config.js';
 import { createStore } from './lib/store.js';
-import { buildChipState, chipHead, chipTail } from './lib/chip.js';
+import { buildChipState, chipLabelText, chipTail } from './lib/chip.js';
 
 const $ = (id) => document.getElementById(id);
 const cfgStore = createConfig(chrome.storage.local);
@@ -59,7 +59,9 @@ async function render() {
     left.appendChild(name);
     if (chip.state === 'labeled') {
       const tag = document.createElement('span');
-      tag.textContent = ` · ${chipHead(chip)}`;
+      // The row has the width to print every label the member carries, where the
+      // chip on the page has to stack them.
+      tag.textContent = ` · ${chipLabelText(chip)}`;
       left.appendChild(tag);
     }
 
