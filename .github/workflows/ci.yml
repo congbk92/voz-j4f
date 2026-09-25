@@ -1,0 +1,36 @@
+name: CI
+
+# Runs the suite on commits that reach master and on every PR into it. Tag pushes
+# are deliberately not included: release.yml already runs the suite on its way to
+# publishing, so excluding tags here avoids a second, redundant run per release.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# The token needs nothing here; the job only reads the repo.
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the previous run's result moot, and its
+# minutes are already spent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The suite is entirely offline — no network, no credentials — so a flaky
+      # connection cannot turn a green branch red.
+      - run: npm test
