@@ -2,7 +2,6 @@
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EXT = join(ROOT, 'extension');
@@ -92,19 +91,13 @@ function main() {
     process.exit(1);
   }
 
-  const manifest = JSON.parse(readFileSync(join(EXT, 'manifest.json'), 'utf8'));
   rmSync(DIST, { recursive: true, force: true });
   mkdirSync(DIST, { recursive: true });
   cpSync(EXT, DIST, { recursive: true });
 
-  const zipName = `voz-jev-${manifest.version}.zip`;
-  try {
-    execFileSync('zip', ['-qr', zipName, '.'], { cwd: DIST });
-    console.log(`✓ dist/ built and zipped to dist/${zipName}`);
-  } catch {
-    console.log('✓ dist/ built (no `zip` binary found; skipped the archive)');
-  }
+  console.log('✓ dist/ built');
   console.log('\nInstall: chrome://extensions → Developer mode → Load unpacked → select dist/');
+  console.log('Release: npm run pack writes the archive a release attaches.');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
