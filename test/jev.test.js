@@ -19,15 +19,13 @@ describe('buildState', () => {
                    'e'.repeat(1200), 'f'.repeat(800), 'g'.repeat(700)];
     const state = buildState(member(posts));
     expect(state.posts).toHaveLength(MAX_POSTS);
-    // c (3000), e (1200), b (900), f (800), g (700), d (50) — by original length.
-    // Ranking uses ORIGINAL length, so the four posts above the 800-char cap keep
-    // their original order even though all four truncate to the same length.
+    // Identity is the only way to observe rank-before-truncate: c, e, b and f all
+    // cap at 800, so truncate-then-rank would yield b,c,e,f,g,d instead.
     expect(state.posts.map((p) => p[0])).toEqual(['c', 'e', 'b', 'f', 'g', 'd']);
     expect(state.posts[0]).toHaveLength(MAX_POST_CHARS);
-    expect(state.posts[1]).toHaveLength(MAX_POST_CHARS);
-    expect(state.posts[4]).toHaveLength(700);
+    expect(state.posts[1]).toHaveLength(MAX_POST_CHARS);  // 1200-char post, truncated
+    expect(state.posts[4]).toHaveLength(700);             // under the cap, survives whole
     expect(state.posts[5]).toHaveLength(50);
-    expect(state.posts).not.toContain('a'.repeat(10));
   });
 
   it('truncates each post at 800 characters', () => {
@@ -70,10 +68,23 @@ describe('buildQuestions', () => {
     expect(q.archetype.criteria.troll).toContain('gây tranh cãi');
   });
 
-  it('builds one boolean per lean question', () => {
+  it('builds one boolean per lean question, flat beside archetype', () => {
     const q = buildQuestions(DEFAULT_LABELS, LEAN_QUESTIONS, ARCHETYPE_INSTRUCTIONS);
-    expect(Object.keys(q.lean)).toHaveLength(6);
-    for (const v of Object.values(q.lean)) expect(v.type).toBe('boolean');
+    expect(Object.keys(q)).toHaveLength(1 + Object.keys(LEAN_QUESTIONS).length);
+    for (const key of Object.keys(LEAN_QUESTIONS)) {
+      expect(q[key].type).toBe('boolean');
+      expect(typeof q[key].instructions).toBe('string');
+    }
+  });
+
+  it('gives every question its own type discriminator, which is what the gateway validates', () => {
+    // The nesting bug shipped past the suite because nothing asserted this: every
+    // value in `questions` must carry a `type`, and the gateway 400s without it.
+    const q = buildQuestions(DEFAULT_LABELS, LEAN_QUESTIONS, ARCHETYPE_INSTRUCTIONS);
+    for (const v of Object.values(q)) {
+      expect(['choice', 'score', 'boolean']).toContain(v.type);
+      expect(typeof v.instructions).toBe('string');
+    }
   });
 });
 
@@ -124,7 +135,9 @@ describe('callJev', () => {
 });
 
 describe('parseAnswer', () => {
-  const answers = (archetype, lean) => ({ archetype, lean });
+  // `questions` is flat, so lean answers sit beside archetype at the top level
+  // rather than nested under a `lean` key. Spreading mirrors that shape.
+  const answers = (archetype, lean = {}) => ({ archetype, ...lean });
 
   it('accepts a valid choice and keeps probabilities', () => {
     const got = parseAnswer(answers(
