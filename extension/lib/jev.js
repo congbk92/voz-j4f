@@ -67,6 +67,10 @@ export async function callJev({ apiKey, modelId, state, questions, fetchImpl = f
       'ai-model-id': modelId,
     },
     body: JSON.stringify({ state, questions, providerOptions: {} }),
+    // Without this, a request that never settles holds its queue slot forever and
+    // makes that member permanently un-enqueueable, including by force. A timeout
+    // is also the honest bound for a classification call.
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!res.ok) {

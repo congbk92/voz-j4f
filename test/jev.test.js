@@ -111,6 +111,10 @@ describe('callJev', () => {
     expect(JSON.parse(init.body)).toEqual({
       state: { member: 'alice' }, questions: { archetype: {} }, providerOptions: {},
     });
+    // A request that never settles would hold its queue slot forever, and
+    // `enqueue`'s early return would then make that member un-enqueueable — by
+    // force included. The call must therefore carry a timeout signal.
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('returns the answers map', async () => {
