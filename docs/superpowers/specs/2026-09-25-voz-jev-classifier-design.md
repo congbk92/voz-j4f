@@ -528,7 +528,7 @@ reclassify interval, per-member post cap, member cap, label TTL, and a
 "test connection" button that classifies a fixed sample string and reports the
 result.
 
-## 10. Unverified: voz.vn markup
+## 10. voz.vn markup — verified by probe
 
 **voz.vn returns HTTP 403 to automated fetches**, so the DOM could not be
 inspected while designing. The platform is confirmed to be **XenForo**
@@ -540,28 +540,58 @@ is **stale for markup** — its selectors (`table[id^='post']`, `td.alt2`,
 `#vB_Editor_001_textarea`) are vBulletin, from before the migration. Its manifest
 and options-page patterns remain useful; its DOM layer does not.
 
-The expected markup family is XenForo 2.x — `article.message[data-author]`,
-`data-content="post-NNN"`, `.message-content .bbWrapper`, `.message-userExtras`
-— but this is an assumption, not a verified fact, and voz's templates may be
-customized.
+**Run on a live thread on 2026-09-25** (`scripts/probe.js`, pasted into the
+DevTools console while logged in). `<html data-xf="2.3" data-template="thread_view">`
+confirms XenForo 2.3.
 
-**Therefore the first implementation task is a probe, not code.** `scripts/probe.js`
-is a snippet pasted into the DevTools console on a real voz thread page (logged
-in, so no bot wall), which is exploratory rather than confirmatory: it dumps the
-actual structure rather than testing a fixed selector list, so it survives
-whatever XenForo 2.3 or voz's customizations did. It reports:
+| Candidate | Matches | Verdict |
+|---|---|---|
+| `article.message` | 20 | the post container |
+| `[data-content^="post-"]` | 20 | same set; carries `data-content="post-<id>"` |
+| `[data-author]` | **25** | 20 posts plus 5 non-post elements — never use this alone as the post selector |
+| `.message-content`, `.bbWrapper`, `.message-name` | 20 each | present, as expected |
+| `.message-userExtras` | **0** | absent — see below |
+| `li.message`, `table[id^="post"]` | 0 | confirms voz's move off vBulletin |
+| `.pageNav` / `.p-title-value` | 2 / 1 | pagination and thread title |
 
-- match counts for candidate post containers, author, body, and profile selectors
-- the tag, classes, and attributes of the first matching post element, plus a
-  trimmed `outerHTML`
-- how author id, author name, join date, and post count are exposed
-- pagination structure
-- **the theme mechanism**: root element classes, `data-*` attributes, and any
-  theme key in `localStorage`
+A post element's attributes are exactly `class`, `data-author`, `data-content`,
+`id`.
 
-Its JSON output is pasted back, and `lib/voz.js` plus the test fixture are
-written against what it reports. Until then, the selectors in this spec are
-placeholders for a verified value.
+**Member links are `/u/<name>.<id>/`, not `/members/`.** voz customises the XenForo
+route prefix, so the assumed selector matched nothing and the probe's first run
+reported `id: null`. The authoritative source is `data-user-id`, present on both
+the avatar link and the username link:
+
+```html
+<a href="/u/kido1412.821098/" class="username " data-user-id="821098">kido1412</a>
+```
+
+`memberIdOf` therefore reads `[data-user-id]` first and falls back to parsing the
+href — which also survives the prefix changing again.
+
+**Join date and post count are not available.** `.message-userExtras` matches
+nothing; the user block holds only `message-name` and `userTitle`. Recovering a
+join date would mean fetching the member's profile, which this design deliberately
+does not do. `buildState` already omits unobserved fields, so nothing breaks — but
+`joined`/`postCount` will be absent in practice, and `profileFrom` is defensive
+code for other XenForo layouts rather than a path voz exercises.
+
+**Theme.** `<html>` carries `id`, `lang`, `dir`, `data-xf`, `data-app`,
+`data-template`, `data-container-key`, `data-content-key`, `data-logged-in`,
+`data-cookie-prefix`, `data-csrf`, and a class list — and **no `data-variation`**.
+The mechanism this spec originally assumed does not exist on this install. Chip
+colours key off `prefers-color-scheme`; the `data-variation` check is kept as a
+harmless OR in case a style variation is ever enabled.
+
+**The probe is exploratory, not confirmatory** — it dumps what is there rather
+than testing a fixed selector list, which is why it caught both the `/u/` prefix
+and the missing `.message-userExtras` that a pass/fail check would have reported
+as a bare failure. It reports match counts, the first post's tag/classes/
+attributes and a trimmed `outerHTML`, how author id and name are exposed,
+pagination structure, and the theme mechanism.
+
+Note: the probe output includes `data-csrf`, a per-session token. Nothing stores
+or sends it, but it should not be pasted into shared logs.
 
 ## 11. Testing
 
