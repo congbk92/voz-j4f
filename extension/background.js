@@ -6,6 +6,25 @@ import { buildChipState } from './lib/chip.js';
 
 const CONCURRENCY = 2;
 
+// Spec §8: "Failures retry twice with exponential backoff, then set `lastError`".
+// Each entry is the wait before the attempt that follows it, so two retries means
+// two delays and at most three attempts.
+const RETRY_DELAYS_MS = [500, 1000];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Pure. Spec §8's table retries `429` and network failures; a 5xx is the same
+ * class of transient server fault, and an abort is this side's own timeout, which
+ * is a network failure by another name. Everything else is final: a client error
+ * will not heal on a second attempt, so retrying a `401`/`403` only multiplies
+ * failed calls against the gateway and delays the `lastError` the UI reads.
+ */
+function isRetryable(e) {
+  if (!(e instanceof JevHttpError)) return true;
+  return e.status === 429 || e.status >= 500;
+}
+
 const storage = chrome.storage.local;
 const cfgStore = createConfig(storage);
 const store = createStore(storage);
@@ -77,12 +96,29 @@ async function runOne(memberId, force = false) {
   const state = buildState(member);
   const questions = buildQuestions(cfg.labels, LEAN_QUESTIONS, ARCHETYPE_INSTRUCTIONS);
 
+  // One attempt plus at most two retries. Without this a single transient blip
+  // cost the member a full RETRY_AFTER_MS — an hour — before it was tried again.
   let answers;
-  try {
-    answers = await callJev({ apiKey: cfg.apiKey, modelId: cfg.modelId, state, questions });
-  } catch (e) {
-    const code = e instanceof JevHttpError ? e.status : 0;
-    await store.setError(memberId, { code, message: e.message, at: Date.now() });
+  let failure = null;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      answers = await callJev({ apiKey: cfg.apiKey, modelId: cfg.modelId, state, questions });
+      failure = null;
+      break;
+    } catch (e) {
+      failure = e;
+      if (attempt === RETRY_DELAYS_MS.length || !isRetryable(e)) break;
+      // Awaited, not a blocking sleep: this member's slot idles while the other
+      // slot keeps draining the queue, so a flaky gateway stalls one member
+      // rather than the pump.
+      console.warn('[jev] retrying', memberId, `in ${RETRY_DELAYS_MS[attempt]}ms`, e.message);
+      await sleep(RETRY_DELAYS_MS[attempt]);
+    }
+  }
+
+  if (failure) {
+    const code = failure instanceof JevHttpError ? failure.status : 0;
+    await store.setError(memberId, { code, message: failure.message, at: Date.now() });
     await broadcast(memberId);
     return;
   }
