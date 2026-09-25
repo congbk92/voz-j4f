@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "VOZ jev Classifier",
+  "version": "0.1.0",
+  "description": "Dán nhãn thành viên voz.vn bằng model jev. Chỉ dùng cá nhân.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://ai-gateway.vercel.sh/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["https://voz.vn/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    { "resources": ["lib/*.js"], "matches": ["https://voz.vn/*"] }
+  ],
+  "action": { "default_popup": "popup.html" },
+  "options_page": "options.html"
+}

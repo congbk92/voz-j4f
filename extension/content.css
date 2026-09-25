@@ -1,0 +1,16 @@
+:root {
+  --jev-chip-radius: 999px;
+  --jev-chip-font: 11px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.jev-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--jev-chip-radius);
+  font: var(--jev-chip-font);
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.jev-chip--muted { opacity: 0.75; font-weight: 500; }

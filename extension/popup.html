@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 260px; margin: 0; padding: 12px;
+           font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    #status { color: #52606d; margin: 8px 0; }
+    .warn { color: #991b1b; }
+  </style>
+</head>
+<body>
+  <label><input type="checkbox" id="enabled"> Bật thu thập &amp; phân loại</label>
+  <label><input type="checkbox" id="verbose"> Hiện chi tiết cache</label>
+  <div id="status">Đang tải…</div>
+  <div id="warn" class="warn"></div>
+  <button id="options">Cài đặt</button>
+  <div id="members"></div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
