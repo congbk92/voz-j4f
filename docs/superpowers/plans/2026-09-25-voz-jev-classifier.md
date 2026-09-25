@@ -1172,7 +1172,10 @@ git commit -m "feat: add exploratory DOM probe for voz markup discovery"
 
 - [ ] **Step 1: Write the failing extraction test**
 
-Create `test/voz.test.js`. **Step 1a:** paste the real `outerHTML` the Task 3 checkpoint returned into `FIXTURE_POST` and the surrounding page structure into `FIXTURE_PAGE`. The markup below is the provisional XenForo 2.x shape and is what the assertions are written against — if the checkpoint shows different structure, adjust `SELECTORS` in Step 3 rather than the assertions' intent.
+Create `test/voz.test.js`. **Step 1a (done):** the Task 3 checkpoint has run, and the fixtures below
+are the markup it returned from a live thread — real class names, real `data-*` attributes, real
+`/u/<name>.<id>/` member hrefs, real post ids. They are not the provisional XenForo shape they
+started as. Do not "correct" them toward generic XenForo; voz's install is what the tests pin.
 
 ```js
 import { describe, it, expect } from 'vitest';
