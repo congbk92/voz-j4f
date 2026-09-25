@@ -322,6 +322,18 @@ describe('normalize', () => {
     expect(normalize({ threshold: -5 }).threshold).toBe(1);
   });
 
+  it('clamps maxMembers to at least 1, since 0 would evict every stored member', () => {
+    expect(normalize({ maxMembers: 0 }).maxMembers).toBe(1);
+    expect(normalize({ maxMembers: -5 }).maxMembers).toBe(1);
+    expect(normalize({ maxMembers: 50 }).maxMembers).toBe(50);
+  });
+
+  it('clamps reclassifyEvery to at least 1, since 0 would make every label permanently stale', () => {
+    expect(normalize({ reclassifyEvery: 0 }).reclassifyEvery).toBe(1);
+    expect(normalize({ reclassifyEvery: -5 }).reclassifyEvery).toBe(1);
+    expect(normalize({ reclassifyEvery: 25 }).reclassifyEvery).toBe(25);
+  });
+
   it('preserves unknown keys so a future version does not wipe them', () => {
     expect(normalize({ somethingNew: 'keep me' }).somethingNew).toBe('keep me');
   });
@@ -390,8 +402,22 @@ const CFG_KEY = 'cfg';
 
 export function normalize(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
+
   const cap = Math.max(1, Number(cfg.maxPostsPerMember) || DEFAULTS.maxPostsPerMember);
   cfg.maxPostsPerMember = cap;
+
+  // Every count below floors at 1. A zero is not a smaller setting, it is a broken
+  // one — both are reachable by typing 0 into the options page:
+  //   maxMembers 0      -> eviction computes excess = all.length and drops EVERY
+  //                        stored member, including the batch just written.
+  //   reclassifyEvery 0 -> `totalPosts - evidenceCount < 0` is never true, so no
+  //                        label is ever fresh and every collect re-classifies
+  //                        every member above the threshold: unbounded gateway spend.
+  // Clamped here because `normalize` is the single funnel every config read and
+  // write passes through, so it binds every writer, not just the options page.
+  cfg.maxMembers = Math.max(1, Number(cfg.maxMembers) || DEFAULTS.maxMembers);
+  cfg.reclassifyEvery = Math.max(1, Number(cfg.reclassifyEvery) || DEFAULTS.reclassifyEvery);
+
   cfg.threshold = Math.min(cap, Math.max(1, Number(cfg.threshold) || 1));
   return cfg;
 }
@@ -415,7 +441,7 @@ export function createConfig(storage) {
 - [ ] **Step 10: Run the full suite**
 
 Run: `npm test`
-Expected: PASS — 9 labels tests + 9 config tests
+Expected: PASS — 9 labels tests + 13 config tests
 
 - [ ] **Step 11: Commit**
 
