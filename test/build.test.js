@@ -58,6 +58,42 @@ describe('validateManifest', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  describe('version format', () => {
+    const withVersion = (version) => {
+      const dir = scaffold({
+        'background.js': '', 'content.js': '', 'content.css': '', 'lib/voz.js': '',
+      }, { ...BASE, version });
+      try {
+        return validateManifest(dir).join('\n');
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    };
+
+    it('accepts what Chrome accepts', () => {
+      for (const v of ['1', '0.0.2', '1.2.3.4', '0', '65535.65535']) {
+        expect(withVersion(v)).not.toContain('version must be');
+      }
+    });
+
+    it('rejects a v-prefixed version, which is what a hand-edit bumps to', () => {
+      // The tag carries the `v`; the manifest must not. A `v0.0.2` here passes
+      // every file check and then fails the release tag comparison, which reads
+      // as "v0.0.2 does not match v0.0.2" and is impossible to diagnose from the
+      // error alone — so it is caught here instead.
+      expect(withVersion('v0.0.2')).toContain('version must be');
+    });
+
+    it('rejects the other shapes Chrome refuses to load', () => {
+      for (const v of ['1.2.3.4.5', '1.0.0-rc1', '1.0.0 ', '01.2.3', '1.2.x', '', 1.2]) {
+        expect(withVersion(v)).toContain('version must be');
+      }
+    });
+
+    it('rejects a part above 65535', () => {
+      expect(withVersion('65536.0.0')).toContain('version must be');
+      expect(withVersion('1.999999')).toContain('version must be');
+    });
+  });
+
   it('checks the popup and options pages too, not just scripts', () => {
     const dir = scaffold({
       'background.js': '', 'content.js': '', 'content.css': '', 'lib/voz.js': '',

@@ -4,7 +4,10 @@ name: Release
 # commits and no branch push can publish anything.
 on:
   push:
-    tags: ['v*']
+    # Release tags are the extension version on its own — `0.0.2`, never `v0.0.2`.
+    # The manifest version has to satisfy Chrome's format, so making the tag the
+    # same string leaves no transformation between them to get out of step.
+    tags: ['[0-9]*']
 
 # `gh release create` writes a release; the default token is read-only.
 permissions:

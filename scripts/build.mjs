@@ -28,6 +28,19 @@ export function validateManifest(extDir) {
     problems.push(`manifest_version must be 3, found ${manifest.manifest_version}`);
   }
 
+  // Chrome wants one to four dot-separated integers, each 0-65535, with no
+  // leading zeros. It refuses to load a manifest that says anything else —
+  // a `v0.0.2` written by hand while bumping is the easy mistake, and the
+  // failure it causes surfaces only as a release-tag mismatch much later.
+  const version = manifest.version;
+  const parts = typeof version === 'string' ? version.split('.') : [];
+  const badPart = parts.find((p) => !/^(0|[1-9]\d*)$/.test(p) || Number(p) > 65535);
+  if (typeof version !== 'string' || parts.length < 1 || parts.length > 4 || badPart !== undefined) {
+    problems.push(
+      `version must be 1-4 dot-separated integers (0-65535, no leading zeros), found ${JSON.stringify(version)}`,
+    );
+  }
+
   const check = (rel, context) => {
     if (typeof rel !== 'string' || rel.includes('*')) return; // globs are checked below
     if (!existsSync(join(extDir, rel))) problems.push(`${rel} (referenced by ${context}): missing`);

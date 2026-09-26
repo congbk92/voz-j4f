@@ -167,7 +167,7 @@ function main() {
   const kib = (statSync(zipPath).size / 1024).toFixed(1);
   console.log(`✓ dist/ built and packed to dist/${basename(zipPath)} (${kib} KiB, ${entries.length} files)`);
   console.log(`\nInstall: extract the zip, then chrome://extensions → Developer mode → Load unpacked.`);
-  console.log(`Release: tag v${result.version}, and the tag workflow attaches this archive.`);
+  console.log(`Release: tag ${result.version}, and the tag workflow attaches this archive.`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {

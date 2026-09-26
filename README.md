@@ -46,11 +46,15 @@ Point **Load unpacked** at `dist/` to try a build. Tests run in CI on every push
 ## Releasing
 
 Bump `version` in `extension/manifest.json` — the release refuses to run when the tag
-disagrees — then:
+disagrees — then tag the version exactly as it is written there, with no `v`:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag 0.1.0
+git push origin 0.1.0
 ```
+
+The tag carries no `v` because the manifest version must satisfy Chrome's format
+(bare dot-separated integers), and keeping the tag identical to it means there is no
+transformation between the two that could disagree.
 
 That runs the tests, packs, and attaches the zip to a GitHub Release.
