@@ -48,6 +48,22 @@
     <input type="number" id="maxMembers" min="1">
   </fieldset>
 
+  <details>
+    <summary><b>Nâng cao — nhịp gọi gateway</b></summary>
+    <p class="hint">
+      Chỉ cần chỉnh khi hay gặp lỗi <code>429</code>. Khoảng cách càng lớn thì
+      phân loại càng chậm nhưng càng ít bị gateway chặn.
+    </p>
+    <fieldset>
+      <label for="minRequestIntervalMs">Cách nhau tối thiểu giữa hai lần gọi (ms)</label>
+      <input type="number" id="minRequestIntervalMs" min="0" step="100">
+      <label for="maxRequeues">Số lần xếp lại hàng đợi khi một thành viên lỗi</label>
+      <input type="number" id="maxRequeues" min="1" max="10">
+      <label for="requestTimeoutMs">Chờ tối đa mỗi lần gọi (ms)</label>
+      <input type="number" id="requestTimeoutMs" min="1000" step="1000">
+    </fieldset>
+  </details>
+
   <fieldset>
     <legend>Nhãn</legend>
     <p class="hint">Sửa mô tả sẽ làm nhãn cũ trở nên không so sánh được và chúng sẽ được phân loại lại.</p>

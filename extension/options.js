@@ -96,6 +96,12 @@ async function load() {
   $('ttlDays').value = Math.round(cfg.labelTtlMs / 86400000);
   $('maxPostsPerMember').value = cfg.maxPostsPerMember;
   $('maxMembers').value = cfg.maxMembers;
+  // Re-read rather than echoed from the form: `normalize` clamps these, and
+  // showing back what was stored is how a rejected value becomes visible instead
+  // of being silently swallowed.
+  $('minRequestIntervalMs').value = cfg.minRequestIntervalMs;
+  $('maxRequeues').value = cfg.maxRequeues;
+  $('requestTimeoutMs').value = cfg.requestTimeoutMs;
   labels = cfg.labels.map((l) => ({ ...l }));
   renderLabels();
 }
@@ -122,6 +128,9 @@ $('save').addEventListener('click', async () => {
     labelTtlMs: Math.max(0, num('ttlDays', DEFAULTS.labelTtlMs / 86400000)) * 86400000,
     maxPostsPerMember: num('maxPostsPerMember', DEFAULTS.maxPostsPerMember),
     maxMembers: num('maxMembers', DEFAULTS.maxMembers),
+    minRequestIntervalMs: num('minRequestIntervalMs', DEFAULTS.minRequestIntervalMs),
+    maxRequeues: num('maxRequeues', DEFAULTS.maxRequeues),
+    requestTimeoutMs: num('requestTimeoutMs', DEFAULTS.requestTimeoutMs),
     labels: labels.map((l) => ({ ...l })),
   });
   $('saveResult').textContent = '✓ Đã lưu';
@@ -152,6 +161,12 @@ $('test').addEventListener('click', async () => {
       modelId: $('modelId').value.trim() || 'typesafe-ai/jev',
       state: buildState(sample),
       questions: buildQuestions(labels.length ? labels : DEFAULT_LABELS, LEAN_QUESTIONS, ARCHETYPE_INSTRUCTIONS),
+      // The saved timeout, so a diagnostic behaves like a real request. The
+      // retry policy is jev.js's own default here: this button is a one-shot
+      // check the user is watching, and the worker's queue — not this — is where
+      // the extension's retrying happens. A bad key still fails fast: 401/403
+      // are never retried.
+      policy: { requestTimeoutMs: cfg.requestTimeoutMs },
     });
     const parsed = parseAnswer(answers, labels.length ? labels : DEFAULT_LABELS);
     out.textContent = `✓ ${parsed.choice} (${Object.entries(parsed.lean).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', ') || 'no lean'})`;

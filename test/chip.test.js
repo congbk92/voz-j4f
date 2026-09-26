@@ -340,3 +340,62 @@ describe('buildChipState', () => {
     expect(buildChipState(m, CFG, NOW).state).toBe('labeled');
   });
 });
+
+describe('retrying', () => {
+  const retry = (over = {}) => ({ attempt: 2, maxAttempts: 4, at: NOW, ...over });
+  const retryingMember = (over = {}) => labeled({ label: null, retrying: retry(), ...over });
+
+  it('shows the attempt in flight for a member with no label yet', () => {
+    const s = buildChipState(retryingMember(), CFG, NOW);
+    expect(s.state).toBe('retrying');
+    expect(s.attempt).toBe(2);
+    expect(s.maxAttempts).toBe(4);
+    expect(chipHead(s)).toBe('↻ 2/4');
+  });
+
+  it('keeps the label and rides the retry alongside it', () => {
+    // The chip flicking to a spinner and back on every transient blip would lose
+    // information the reader already had.
+    const s = buildChipState(labeled({ retrying: retry() }), CFG, NOW);
+    expect(s.state).toBe('labeled');
+    expect(s.labels[0].key).toBe('troll');
+    expect(chipHead(s)).toBe('👹 Troll ↻2');
+  });
+
+  it('outranks a stored error, which may be an hour old', () => {
+    const m = retryingMember({ lastError: { code: 429, message: 'slow down', at: NOW - DAY } });
+    expect(buildChipState(m, CFG, NOW).state).toBe('retrying');
+  });
+
+  it('outranks an error newer than the label too, since the retry is now', () => {
+    const m = labeled({
+      label: { ...labeled().label, at: NOW - 8 * DAY },
+      lastError: { code: 429, message: 'slow down', at: NOW },
+      retrying: retry(),
+    });
+    expect(buildChipState(m, CFG, NOW).state).toBe('labeled');
+  });
+
+  it('ignores a marker left behind by a worker the browser killed', () => {
+    // Nothing clears the marker when the worker dies mid-backoff, so a stale one
+    // would otherwise pin the chip on "retrying" forever.
+    const stale = { attempt: 2, maxAttempts: 4, at: NOW - 200000 };
+    expect(buildChipState(retryingMember({ retrying: stale }), CFG, NOW).state).toBe('collecting');
+    expect(buildChipState(labeled({ retrying: stale }), CFG, NOW).retrying).toBeUndefined();
+  });
+
+  it('keeps a marker written while the request was still in flight', () => {
+    // A marker is rewritten at every requeue, so the gap it has to survive is the
+    // wait for the request already running, not the whole queue.
+    const fresh = { attempt: 2, maxAttempts: 4, at: NOW - 45000 };
+    expect(buildChipState(retryingMember({ retrying: fresh }), CFG, NOW).state).toBe('retrying');
+  });
+
+  it('reports no spinner and no NaN expiry under a retrying chip', () => {
+    // `chipTail` used to read `expiresAt` unconditionally, which a retrying chip
+    // has never had.
+    const s = buildChipState(retryingMember(), CFG, NOW);
+    expect(chipTail(s, CFG, NOW)).toBeNull();
+    expect(chipTail(s, VERBOSE, NOW)).toBe('13 cmt');
+  });
+});

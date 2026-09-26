@@ -1,4 +1,5 @@
 import { FAMILY_COLORS } from './labels.js';
+import { DEFAULT_RETRY_POLICY } from './jev.js';
 
 const UNITS = [
   ['d', 86400000],
@@ -102,9 +103,30 @@ export function pickLabels(label, cfg) {
     .slice(0, MAX_LABELS);
 }
 
+/**
+ * How long a retry marker stays believable. A worker the browser killed mid-queue
+ * never gets to clear its own marker, and without this the chip would say
+ * "retrying" forever.
+ *
+ * Sized off the request timeout plus a minute rather than the whole queue: a
+ * marker is rewritten at every requeue, so the only gap it has to survive is the
+ * wait for a request already in flight plus its turn in the queue.
+ */
+const RETRY_STALE_SLACK_MS = 60000;
+
+/** The live retry marker, or null when there is none or it has gone stale. */
+function liveRetry(member, cfg, now) {
+  const r = member.retrying;
+  if (!r || typeof r.at !== 'number') return null;
+  const timeout = Number(cfg && cfg.requestTimeoutMs) || DEFAULT_RETRY_POLICY.requestTimeoutMs;
+  if (now - r.at > timeout + RETRY_STALE_SLACK_MS) return null;
+  return { attempt: r.attempt, maxAttempts: r.maxAttempts };
+}
+
 /** Turn a member record into the display state the chip renders. */
 export function buildChipState(member, cfg, now) {
   const cached = member.posts.length;
+  const retrying = liveRetry(member, cfg, now);
 
   // A label and an error coexist when a re-classification fails: setError keeps
   // the last good label. An error newer than the label must win, or the stale
@@ -113,7 +135,10 @@ export function buildChipState(member, cfg, now) {
   const failedSinceLabel = member.lastError
     && (!member.label || member.lastError.at > member.label.at);
 
-  if (member.label && !failedSinceLabel) {
+  // A live retry keeps the label in front of the reader: the chip flicking to a
+  // spinner and back on every transient blip would lose information the user
+  // already had. The marker rides alongside instead.
+  if (member.label && (retrying || !failedSinceLabel)) {
     // The headline is `labels[0]` rather than a separate lookup of `choice`, so
     // the chip and the list it draws its runners-up from can never disagree.
     // `pickLabels` always resolves at least one, falling back to the raw key.
@@ -131,7 +156,14 @@ export function buildChipState(member, cfg, now) {
       cached,
       seen: member.totalPosts,
       expiresAt: cfg.labelTtlMs > 0 ? member.label.at + cfg.labelTtlMs : null,
+      ...(retrying ? { retrying } : {}),
     };
+  }
+
+  // Ahead of `lastError`, because a retry in flight is the more current fact: the
+  // stored error may be an hour old and this member is being tried again now.
+  if (retrying) {
+    return { state: 'retrying', ...retrying, cached, seen: member.totalPosts };
   }
 
   if (member.lastError) {
@@ -149,7 +181,11 @@ export function buildChipState(member, cfg, now) {
 export function chipHead(chip) {
   if (chip.state === 'collecting') return `${chip.count}/${chip.threshold}`;
   if (chip.state === 'error') return '!';
-  return chip.icon ? `${chip.icon} ${chip.label}` : chip.label;
+  // Both retry shapes end in an arrow: the bare one has no label to sit beside,
+  // so it carries the count too.
+  if (chip.state === 'retrying') return `↻ ${chip.attempt}/${chip.maxAttempts}`;
+  const head = chip.icon ? `${chip.icon} ${chip.label}` : chip.label;
+  return chip.retrying ? `${head} ↻${chip.retrying.attempt}` : head;
 }
 
 /**
@@ -162,7 +198,9 @@ export function chipHead(chip) {
  */
 export function chipTail(chip, cfg, now = Date.now()) {
   if (!cfg.verbose || chip.state === 'collecting') return null;
-  if (chip.state === 'error') return `${chip.cached} cmt`;
+  // Neither has a probability or an expiry to print — a retrying chip has no
+  // label yet, and reading `expiresAt` off it would print a meaningless "0s".
+  if (chip.state === 'error' || chip.state === 'retrying') return `${chip.cached} cmt`;
 
   const parts = [];
   if (chip.probability != null) parts.push(`${Math.round(chip.probability * 100)}%`);

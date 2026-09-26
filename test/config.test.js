@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULTS, RETRY_AFTER_MS, normalize, createConfig } from '../extension/lib/config.js';
 import { DEFAULT_LABELS, LEAN_QUESTIONS, labelSetHash } from '../extension/lib/labels.js';
+/** The queue knobs, pinned here so the spec's numbers have somewhere to break. */
+const DEFAULT_QUEUE_FIELDS = {
+  minRequestIntervalMs: 5000,   // one member leaves the queue every five seconds
+  maxRequeues: 3,               // plus the first try: four attempts in all
+  requestTimeoutMs: 30000,
+};
 
 function fakeStorage(initial = {}) {
   let data = { ...initial };
@@ -27,7 +33,7 @@ describe('DEFAULTS', () => {
       verbose: false,
       apiKey: '',
       modelId: 'typesafe-ai/jev',
-      threshold: 1,
+      threshold: 5,
       reclassifyEvery: 5,
       maxPostsPerMember: 20,
       maxMembers: 300,
@@ -84,6 +90,47 @@ describe('normalize', () => {
 
   it('treats labelTtlMs 0 as a real value, not missing', () => {
     expect(normalize({ labelTtlMs: 0 }).labelTtlMs).toBe(0);
+  });
+});
+
+describe('normalize queue knobs', () => {
+  it('carries the spec defaults', () => {
+    expect(normalize({})).toMatchObject(DEFAULT_QUEUE_FIELDS);
+  });
+
+  it('treats 0 interval as a real value, not missing', () => {
+    // The test suite relies on this to keep the worker ticking immediately, so
+    // it must not be clamped up to the default.
+    expect(normalize({ minRequestIntervalMs: 0 }).minRequestIntervalMs).toBe(0);
+    expect(normalize({ minRequestIntervalMs: -5 }).minRequestIntervalMs).toBe(0);
+    expect(normalize({ minRequestIntervalMs: 2500 }).minRequestIntervalMs).toBe(2500);
+  });
+
+  it('clamps maxRequeues to at least 1, since 0 would never retry a member', () => {
+    // One transient blip and the member sits on an error chip until the page is
+    // revisited — which is the bug the requeue queue exists to fix.
+    expect(normalize({ maxRequeues: 0 }).maxRequeues).toBe(1);
+    expect(normalize({ maxRequeues: -5 }).maxRequeues).toBe(1);
+    expect(normalize({ maxRequeues: 99 }).maxRequeues).toBe(10);
+    expect(normalize({ maxRequeues: 5 }).maxRequeues).toBe(5);
+  });
+
+  it('clamps the request timeout above a floor', () => {
+    expect(normalize({ requestTimeoutMs: 10 }).requestTimeoutMs).toBe(1000);
+    expect(normalize({ requestTimeoutMs: 15000 }).requestTimeoutMs).toBe(15000);
+  });
+
+  it('reads the strings the options page and .env.local actually produce', () => {
+    // Both hand over strings: number inputs read back as text, and every dotenv
+    // value is a string. An empty string is "unset", not zero.
+    const cfg = normalize({ minRequestIntervalMs: '500', maxRequeues: '2', requestTimeoutMs: '15000' });
+    expect(cfg.minRequestIntervalMs).toBe(500);
+    expect(cfg.maxRequeues).toBe(2);
+    expect(cfg.requestTimeoutMs).toBe(15000);
+    // An empty string reaches normalize as 0 and floors, exactly as it does for
+    // maxMembers and maxPostsPerMember. The options page is what turns a cleared
+    // field back into the default, via its own `num()`.
+    expect(normalize({ requestTimeoutMs: '' }).requestTimeoutMs).toBe(1000);
   });
 });
 

@@ -1,5 +1,12 @@
 import { DEFAULT_LABELS } from './labels.js';
+import { DEFAULT_RETRY_POLICY } from './jev.js';
 
+/**
+ * How long a member whose classification *failed for good* is left alone. Only
+ * failures that cannot heal are held this long — a rejected key, say. A busy
+ * gateway is eligible again on the next page load, because an hour of silence
+ * looks exactly like a broken extension.
+ */
 export const RETRY_AFTER_MS = 3600000;
 
 export const DEFAULTS = {
@@ -8,11 +15,19 @@ export const DEFAULTS = {
   apiKey: '',
   modelId: 'typesafe-ai/jev',
   labels: DEFAULT_LABELS,
-  threshold: 1,
+  threshold: 5,
   reclassifyEvery: 5,
   maxPostsPerMember: 20,
   maxMembers: 300,
   labelTtlMs: 604800000,
+
+  // The queue knobs. One member leaves the queue per `minRequestIntervalMs`, and
+  // that spacing is what prevents the rate limit rather than surviving it.
+  // `maxRequeues` is the whole retry policy: a failed member goes back to the end
+  // of the queue this many times before it is recorded as failed.
+  minRequestIntervalMs: 5000,
+  maxRequeues: 3,
+  requestTimeoutMs: DEFAULT_RETRY_POLICY.requestTimeoutMs,
 };
 
 const CFG_KEY = 'cfg';
@@ -56,6 +71,19 @@ export function normalize(raw) {
   cfg.reclassifyEvery = Math.max(1, Number.isFinite(nReclassify) ? nReclassify : DEFAULTS.reclassifyEvery);
 
   cfg.threshold = Math.min(cap, Math.max(1, Number(cfg.threshold) || 1));
+
+  // Zero is meaningful for the interval — it disables the spacing, which the test
+  // suite relies on to stay fast — so this floors at 0 rather than 1.
+  const nInterval = Number(cfg.minRequestIntervalMs);
+  cfg.minRequestIntervalMs = Math.max(0, Number.isFinite(nInterval) ? nInterval : DEFAULTS.minRequestIntervalMs);
+
+  // Requeues floor at 1 because 0 would mean a member is never retried at all:
+  // one transient blip and it sits on an error chip until the page is revisited.
+  const nRequeues = Number(cfg.maxRequeues);
+  cfg.maxRequeues = Math.min(10, Math.max(1, Number.isFinite(nRequeues) ? Math.trunc(nRequeues) : DEFAULTS.maxRequeues));
+
+  const nTimeout = Number(cfg.requestTimeoutMs);
+  cfg.requestTimeoutMs = Math.max(1000, Number.isFinite(nTimeout) ? nTimeout : DEFAULTS.requestTimeoutMs);
   return cfg;
 }
 
