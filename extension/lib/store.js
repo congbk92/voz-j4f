@@ -6,7 +6,7 @@ const MAX_THREADS = 5;
 const key = (id) => `${MEMBER_PREFIX}${id}`;
 const emptyMember = (id, name) => ({
   id, name, totalPosts: 0, posts: [], seenIds: [], threads: [], profile: {},
-  label: null, lastError: null, lastSeenAt: 0,
+  label: null, lastError: null, lastSeenAt: 0, retrying: null,
 });
 
 /** Pure. Decides whether this member is due for a (re-)classification. */
@@ -29,7 +29,13 @@ export function shouldClassify({ member, cfg, now, hash, force = false }) {
     if (freshByHash && freshByTtl && freshByEvidence) return false;
   }
 
-  if (member.lastError && now - member.lastError.at < RETRY_AFTER_MS) return false;
+  // A client error — a rejected key, most often — will not heal on its own, so
+  // the member waits out RETRY_AFTER_MS rather than spending a call per page
+  // load to be told the same thing. A *transient* error must not: parking a
+  // member for an hour because the gateway was briefly busy looks, from the
+  // page, exactly like the extension being broken.
+  if (member.lastError && !member.lastError.retryable
+      && now - member.lastError.at < RETRY_AFTER_MS) return false;
   return true;
 }
 
@@ -146,6 +152,24 @@ export function createStore(storage, now = () => Date.now()) {
       const m = await store.getMember(id);
       if (!m) return null;
       const next = { ...m, lastError: error };
+      await storage.set({ [key(id)]: next });
+      return next;
+    },
+
+    /**
+     * A classification is between attempts, or `null` when it is not. Written
+     * before each backoff sleep and cleared when the run settles, so the chip
+     * can show that work is still happening rather than looking hung.
+     *
+     * It lives on the record rather than in a worker-local map because
+     * `broadcast` and the popup both build their chip from the stored member —
+     * and because a marker left behind by a worker the browser killed has to be
+     * something `buildChipState` can recognise as stale and ignore.
+     */
+    async setRetrying(id, retrying) {
+      const m = await store.getMember(id);
+      if (!m) return null;
+      const next = { ...m, retrying: retrying || null };
       await storage.set({ [key(id)]: next });
       return next;
     },

@@ -72,7 +72,9 @@ async function render() {
     const detail = chipTail(chip, cfg);
     meta.textContent = detail || (chip.state === 'collecting'
       ? `chưa phân loại · ${chip.count}/${chip.threshold}`
-      : `${chip.cached} cmt`);
+      : chip.state === 'retrying'
+        ? `đang thử lại ${chip.attempt}/${chip.maxAttempts}`
+        : `${chip.cached} cmt`);
 
     row.append(left, meta);
     box.appendChild(row);

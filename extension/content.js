@@ -89,10 +89,15 @@
             ? `hết hạn ${new Date(chip.expiresAt).toLocaleString('vi-VN')}`
             : 'không hết hạn',
           lean || null,
+          chip.retrying
+            ? `đang thử lại lần ${chip.retrying.attempt}/${chip.retrying.maxAttempts}`
+            : null,
         ].filter(Boolean).join(' · ')
       : chip.state === 'error'
         ? chip.message
-        : `Đã thu thập ${chip.count}/${chip.threshold} bình luận — bấm để phân loại ngay`;
+        : chip.state === 'retrying'
+          ? `Đang thử lại lần ${chip.attempt}/${chip.maxAttempts} — gateway đang bận`
+          : `Đã thu thập ${chip.count}/${chip.threshold} bình luận — bấm để phân loại ngay`;
   }
 
   /** Spec §9: with the toggle off, members show nothing. */
@@ -161,8 +166,10 @@
 
   document.addEventListener('click', (e) => {
     const node = e.target.closest('.jev-chip');
-    // Labeled chips are informational; only collecting and error chips act on click.
-    if (!node || node.dataset.state === 'labeled') return;
+    // Labeled chips are informational; only collecting and error chips act on
+    // click. A retrying chip is already being worked on, so a force would be
+    // dropped by the worker's in-flight check anyway.
+    if (!node || node.dataset.state === 'labeled' || node.dataset.state === 'retrying') return;
     e.preventDefault();
     chrome.runtime.sendMessage({ type: 'force', memberId: node.dataset.member })
       .catch((err) => console.warn('[jev] force failed', err));

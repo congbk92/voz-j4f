@@ -208,11 +208,14 @@ All state lives in `chrome.storage.local` under two kinds of key.
   apiKey: '',                    // empty = collection on, classification paused
   modelId: 'typesafe-ai/jev',
   labels: [ /* see §7 */ ],
-  threshold: 1,                  // distinct posts before first classification
+  threshold: 5,                  // distinct posts before first classification
   reclassifyEvery: 5,            // new posts since last label before re-running
   maxPostsPerMember: 20,
   maxMembers: 300,
-  labelTtlMs: 604800000          // 7d; 0 disables expiry
+  labelTtlMs: 604800000,         // 7d; 0 disables expiry
+  minRequestIntervalMs: 5000,    // one member leaves the queue per 5s; 0 disables
+  maxRequeues: 3,                // times a failed member goes back in the queue
+  requestTimeoutMs: 30000        // per-request abort
 }
 ```
 
@@ -473,16 +476,44 @@ label, and `lean` is stored as a partial map for exactly this case.
 
 ### Queue
 
-Concurrency 2, owned by `background.js`. A member is enqueued at most once.
-Failures retry twice with exponential backoff, then set `lastError` and stop
-until the trigger conditions are met again or the user forces a re-run.
+A FIFO queue owned by `background.js`. Every member that needs classifying or
+re-classifying goes into it; a member is enqueued at most once.
+
+**One request at a time.** A tick takes exactly one member, spaced at least
+`minRequestIntervalMs` apart, and sends a single request for it. There is never
+more than one request in flight. Without this a page with twenty uncached members
+spent all twenty calls in the same moment, which is what earns the `429` in the
+first place. Nothing is dropped: the queue still holds every member and drains in
+turn.
+
+**The member is re-checked when it reaches the front**, not when it was queued —
+the config may have changed and new posts may have arrived while it waited. A
+member that no longer qualifies (its label became fresh, the threshold went up,
+the master toggle went off) is dropped without spending a call.
+
+**Retrying is "wait your turn again".** A member whose request fails for a
+*retryable* reason goes back to the end of the queue, up to `maxRequeues` times.
+There is no backoff schedule to reason about, and a gateway having a bad minute
+no longer parks a member for an hour while it clears. A `429` carrying
+`Retry-After` pauses the whole queue for that long (capped at 30s), because a
+`429` is the gateway talking about itself rather than about one member.
+
+While a member is waiting its turn again it carries `retrying: { attempt,
+maxAttempts, at }`, which the chip renders as `↻ n/max` beside any label it
+already had. The marker is ignored once older than `requestTimeoutMs` plus a
+minute, so a worker the browser killed cannot leave a chip claiming a retry that
+is not happening.
+
+`lastError` records whether the failure was `retryable`, and `shouldClassify`
+only applies the `RETRY_AFTER_MS` cooldown to one that was not: a rejected key
+will not heal by waiting, but a busy gateway must not cost an hour of silence.
 
 | condition | behavior |
 |---|---|
 | no API key | collection continues; no classification; popup shows a prompt to configure |
-| `401` / `403` | `lastError` set; popup shows "API key sai hoặc hết hạn" |
-| `429` | backoff, 2 retries, then defer |
-| network failure | backoff, 2 retries, then defer |
+| `401` / `403` | `lastError` set, not retryable; popup shows "API key sai hoặc hết hạn"; cooled down for `RETRY_AFTER_MS` |
+| `429` | `Retry-After` pauses the queue; requeued up to `maxRequeues` times, then `lastError` |
+| network failure | requeued up to `maxRequeues` times, then `lastError` |
 | choice not in criteria | discard, set `lastError`, log |
 | `extractPosts` returns nothing | no error, no message; log once per page load |
 
@@ -738,7 +769,11 @@ the pure modules are unit-tested; DOM injection is verified by hand.
 - `jev.test.js` — `buildState` picks the 6 longest by original length and
   truncates at 800; `buildQuestions` mirrors `cfg.labels`; `parseAnswer` accepts
   a valid answer, rejects an unknown choice, and tolerates missing
-  probabilities; `labelSetHash` changes when a description changes.
+  probabilities; `labelSetHash` changes when a description changes. The retry
+  policy is covered with an injected `sleep` and `random`, so no test waits on a
+  real backoff: both forms of `Retry-After`, the per-delay cap, the attempt
+  count, the total budget, that a `401` is not retried, and that a `shouldRetry`
+  returning false stops the loop and rethrows the original error.
 - `store.test.js` — upsert dedupes by `postId`; `posts` caps at
   `maxPostsPerMember` keeping newest; `totalPosts` stays monotonic past the cap;
   eviction drops least-recently-seen at `maxMembers`; `threshold` clamps to

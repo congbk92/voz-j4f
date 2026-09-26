@@ -154,6 +154,33 @@ describe('setLabel and setError', () => {
   });
 });
 
+describe('setRetrying', () => {
+  it('marks a member as between attempts, and clears the mark', async () => {
+    await store.upsertPosts([post('1', '42', 'bình luận đủ dài cho một thành viên')]);
+    await store.setRetrying('42', { attempt: 2, maxAttempts: 4, at: now });
+    expect((await store.getMember('42')).retrying).toEqual({ attempt: 2, maxAttempts: 4, at: now });
+
+    // `null`, not `undefined`: the key has to survive as an explicit "not
+    // retrying" so the chip can tell it apart from a record written before this
+    // field existed.
+    await store.setRetrying('42', null);
+    expect((await store.getMember('42')).retrying).toBeNull();
+  });
+
+  it('leaves the label and posts alone', async () => {
+    await store.upsertPosts([post('1', '42', 'bình luận đủ dài cho một thành viên')]);
+    await store.setLabel('42', { choice: 'troll', probabilities: null, lean: {}, at: now, evidenceCount: 1, labelSetHash: HASH });
+    await store.setRetrying('42', { attempt: 2, maxAttempts: 4, at: now });
+    const m = await store.getMember('42');
+    expect(m.label.choice).toBe('troll');
+    expect(m.posts).toHaveLength(1);
+  });
+
+  it('ignores an unknown member', async () => {
+    expect(await store.setRetrying('nope', { attempt: 1, maxAttempts: 4, at: now })).toBeNull();
+  });
+});
+
 describe('clear and listMembers', () => {
   it('removes every member key', async () => {
     await store.upsertPosts([post('1', '42', 'bình luận đủ dài một'), post('2', '43', 'bình luận đủ dài hai')]);
@@ -248,6 +275,25 @@ describe('shouldClassify', () => {
   it('true once the error cooldown has elapsed', () => {
     const member = m({ lastError: { code: 429, message: 'slow down', at: now - RETRY_AFTER_MS - 1 } });
     expect(shouldClassify({ member, cfg: CFG, now, hash: HASH })).toBe(true);
+  });
+
+  it('leaves a transiently failed member eligible straight away', () => {
+    // The reported bug: one 429 cost a full hour, so a member that failed while
+    // the provider was busy was never classified again until the next hour —
+    // which on the page is indistinguishable from the extension being broken.
+    const member = m({
+      lastError: { code: 429, message: 'slow down', at: now - 1000, retryable: true },
+    });
+    expect(shouldClassify({ member, cfg: CFG, now, hash: HASH })).toBe(true);
+  });
+
+  it('still cools down a failure that waiting cannot fix', () => {
+    // A rejected key is the case the cooldown exists for: retrying it once per
+    // page load spends a call to be told the same thing.
+    const member = m({
+      lastError: { code: 401, message: 'unauthorized', at: now - 1000, retryable: false },
+    });
+    expect(shouldClassify({ member, cfg: CFG, now, hash: HASH })).toBe(false);
   });
 
   it('force bypasses threshold, freshness, and the error cooldown', () => {

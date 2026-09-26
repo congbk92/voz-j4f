@@ -144,6 +144,13 @@ describe('popup status line', () => {
     expect($('#status').textContent).toBe('1 thành viên · 1 đã phân loại');
     expect($('#members .row').textContent).toContain('Troll');
   });
+
+  it('says a member is being retried rather than leaving the row blank', async () => {
+    const retrying = { attempt: 2, maxAttempts: 4, at: Date.now() };
+    await boot({ cfg: { apiKey: 'sk-test' }, members: [member('42', { retrying })] });
+    expect($('#members .row').textContent).toContain('đang thử lại 2/4');
+    expect($('#status').textContent).toBe('1 thành viên · 0 đã phân loại');
+  });
 });
 
 describe('popup detail toggle', () => {
